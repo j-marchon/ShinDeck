@@ -191,7 +191,7 @@ The first `npm run tauri dev` or `npm run tauri build` for Windows downloads ffm
 
 ```sh
 npm run tauri build
-# -> src-tauri/target/release/bundle/nsis/ShinDeck_0.3.0_x64-setup.exe
+# -> src-tauri/target/release/bundle/nsis/ShinDeck_0.3.1_x64-setup.exe
 ```
 
 The `Windows build` GitHub Actions workflow builds the installer on every push.
