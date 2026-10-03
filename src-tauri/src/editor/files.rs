@@ -4,7 +4,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use crate::error::{Error, Result};
 
@@ -102,6 +102,39 @@ pub fn replace(original: &Path, replacement: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Timestamps to carry from a clip onto its edited version, so the gallery's
+/// date (and the date filters) keep describing when it was recorded.
+pub struct Stamps {
+    // Only Windows lets a program set the creation time.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    created: Option<SystemTime>,
+    modified: Option<SystemTime>,
+}
+
+impl Stamps {
+    pub fn of(path: &Path) -> Self {
+        let meta = fs::metadata(path).ok();
+        Self {
+            created: meta.as_ref().and_then(|m| m.created().ok()),
+            modified: meta.as_ref().and_then(|m| m.modified().ok()),
+        }
+    }
+
+    /// Best effort: a clip that keeps a new date is not worth failing an edit for.
+    pub fn apply(&self, path: &Path) {
+        let mut times = fs::FileTimes::new();
+        if let Some(t) = self.modified {
+            times = times.set_modified(t);
+        }
+        #[cfg(windows)]
+        if let Some(t) = self.created {
+            use std::os::windows::fs::FileTimesExt;
+            times = times.set_created(t);
+        }
+        let _ = retry(|| fs::OpenOptions::new().write(true).open(path)?.set_times(times));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,6 +149,25 @@ mod tests {
         }
         assert!(validate_name("Console highlights").is_ok());
         assert!(validate_name("Valorant 2026.08.21 - 18.58.45.11.DVR").is_ok());
+    }
+
+    #[test]
+    fn carries_timestamps_over() {
+        let dir = std::env::temp_dir().join(format!("shindeck-stamps-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let (old, new) = (dir.join("old.mp4"), dir.join("new.mp4"));
+        fs::write(&old, "x").unwrap();
+        fs::write(&new, "y").unwrap();
+        let past = SystemTime::now() - Duration::from_secs(40 * 86_400);
+        let file = fs::OpenOptions::new().write(true).open(&old).unwrap();
+        file.set_times(fs::FileTimes::new().set_modified(past)).unwrap();
+        drop(file);
+
+        Stamps::of(&old).apply(&new);
+        let got = fs::metadata(&new).unwrap().modified().unwrap();
+        let diff = got.duration_since(past).unwrap_or_else(|e| e.duration());
+        assert!(diff < Duration::from_secs(2), "modified time was not carried over");
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

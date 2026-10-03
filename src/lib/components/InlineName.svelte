@@ -87,9 +87,6 @@
     {#if error}<div class="error" role="alert">{error}</div>{/if}
   {:else}
     <button class="title" title="Click to rename" onclick={start}>
-      {#if library.isEdited(clip.id)}
-        <span class="edited" title="Edited in ShinDeck"><Icon name="pencil" size={12} stroke={2.4} /></span>
-      {/if}
       <span class="text">{clip.name}</span>
       <span class="hint"><Icon name="pencil" size={12} /></span>
     </button>
@@ -129,11 +126,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .edited {
-    display: grid;
-    place-items: center;
-    color: var(--accent);
   }
   .hint {
     color: var(--text-faint);

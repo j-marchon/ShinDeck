@@ -62,6 +62,10 @@
 
     <div class="hover-play"><span><Icon name="play" size={22} /></span></div>
 
+    {#if clip.edited}
+      <span class="edited-tag" title="Edited in ShinDeck"><Icon name="pencil" size={12} stroke={2.4} /></span>
+    {/if}
+
     <div class="actions">
       <button class="action edit" title="Edit clip" aria-label="Edit clip" onclick={edit}>
         <Icon name="pencil" size={15} />
@@ -175,7 +179,6 @@
     border-radius: 50%;
     display: grid;
     place-items: center;
-    padding-left: 3px;
     background: rgb(0 0 0 / 0.35);
     backdrop-filter: blur(10px);
     box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
@@ -239,6 +242,21 @@
   }
   .star.active {
     color: var(--accent);
+  }
+
+  .edited-tag {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    color: var(--accent);
+    background: rgb(0 0 0 / 0.42);
+    backdrop-filter: blur(8px);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
   }
 
   .duration {

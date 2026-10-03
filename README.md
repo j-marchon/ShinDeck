@@ -10,7 +10,7 @@ Black and NVIDIA green, a gallery organized by game, a keyboard-driven player an
 - **Organized by game.** ShadowPlay creates one folder per game, and ShinDeck uses that folder as the clip's game.
 - **Gallery.**
   - Each card shows the thumbnail, file name, and the game's name and icon, plus file size, date (`21 Aug '26`) and duration.
-  - Clips edited in ShinDeck get a green pencil before their name.
+  - Clips edited in ShinDeck get a small green pencil badge on the thumbnail. An edited clip keeps the original recording date, so the date filters and sorting stay the same.
 - **Filters in one bar.** All of them combine:
   - game: a searchable menu, with *All games* pinned at the top
   - date range

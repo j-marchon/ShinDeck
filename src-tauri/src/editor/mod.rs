@@ -181,6 +181,7 @@ pub fn export(
 
     let root = library_root(state)?;
     let source = clip_path(state, id)?;
+    let stamps = files::Stamps::of(&source);
     let probe = ffmpeg::probe(&source)?;
     let encoder = if ffmpeg::has_nvenc() { Encoder::Nvenc } else { Encoder::X264 };
     let temp = files::temp_path(&source, "export");
@@ -230,6 +231,9 @@ pub fn export(
         let _ = fs::remove_file(&temp);
         return Err(e);
     }
+
+    // The export is a brand-new file; give it the original's recording date.
+    stamps.apply(&final_path);
 
     let old_id = match destination {
         Destination::Replace => id,
