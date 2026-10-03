@@ -7,10 +7,11 @@ Black and NVIDIA green, a gallery organized by game, a keyboard-driven player an
 
 To build an installer:
 git clone https://github.com/j-marchon/ShinDeck.git
+```
 cd ShinDeck
 npm install
 npm run tauri build
-
+```
 ## Where data lives
 
 | What                    | Where                                               |
