@@ -14,6 +14,11 @@ export const tauriBackend: Backend = {
   scanLibrary: () => invoke<Library>("scan_library"),
   setFavorite: (id, favorite) => invoke("set_favorite", { id, favorite }),
   revealClip: (id) => invoke("reveal_clip", { id }),
+  renameClip: (id, name) => invoke<Clip>("rename_clip", { id, name }),
+  exportClip: (id, spec, destination) => invoke<Clip>("export_clip", { id, spec, destination }),
+  cancelExport: () => invoke("cancel_export"),
+  onExportProgress: (handler) => listen<number>("export-progress", (e) => handler(e.payload)),
+  setSaveMode: (mode) => invoke<Settings>("set_save_mode", { mode }),
 
   async pickFolder(defaultPath) {
     const picked = await open({ directory: true, defaultPath, title: "Choose your ShadowPlay clips folder" });
@@ -24,6 +29,11 @@ export const tauriBackend: Backend = {
 
   isFullscreen: () => appWindow.isFullscreen(),
   setFullscreen: (on) => appWindow.setFullscreen(on),
+  minimizeWindow: () => appWindow.minimize(),
+  toggleMaximizeWindow: () => appWindow.toggleMaximize(),
+  closeWindow: () => appWindow.close(),
+  isMaximized: () => appWindow.isMaximized(),
+  onWindowResized: (handler) => appWindow.onResized(() => handler()),
   async toggleFullscreen() {
     const next = !(await appWindow.isFullscreen());
     await appWindow.setFullscreen(next);
@@ -32,8 +42,10 @@ export const tauriBackend: Backend = {
 
   // Videos stream through Tauri's asset protocol (supports HTTP range
   // requests, so seeking never reads the whole file).
-  videoUrl: (clip: Clip) => convertFileSrc(clip.path),
+  // The query only busts the webview cache after an edit replaces the file.
+  videoUrl: (clip: Clip) => `${convertFileSrc(clip.path)}?v=${clip.modified}`,
   // `modified` busts the webview cache when a clip file is replaced.
   thumbnailUrl: (clip: Clip) => `${convertFileSrc(clip.id, "thumb")}?v=${clip.modified}`,
   gameIconUrl: (gameId) => convertFileSrc(gameId, "gameicon"),
+  filmstripUrl: (clip: Clip) => `${convertFileSrc(clip.id, "filmstrip")}?v=${clip.modified}`,
 };

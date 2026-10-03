@@ -84,3 +84,74 @@ input {
 ::-webkit-scrollbar-thumb:hover {
   background-color: #3a3a3a;
 }
+
+/* Shared menu rows used inside dropdowns. */
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: left;
+}
+.menu-item:hover,
+.menu-item.focused {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.menu-item.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.menu-item .menu-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.menu-item.active .menu-count {
+  color: var(--accent);
+}
+.menu-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+
+/* Shared toolbar chip button. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.chip:hover {
+  color: var(--text);
+  border-color: #3a3a3a;
+}
+.chip.on {
+  color: var(--accent);
+  border-color: rgb(118 185 0 / 0.55);
+  background: var(--accent-soft);
+  box-shadow: 0 0 14px -4px rgb(118 185 0 / 0.5);
+}
+.chip.on:hover {
+  border-color: var(--accent);
+}

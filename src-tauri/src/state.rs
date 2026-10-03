@@ -3,7 +3,8 @@ use std::sync::{Mutex, RwLock};
 
 use notify_debouncer_mini::{notify::RecommendedWatcher, Debouncer};
 
-use crate::config::{Favorites, Settings, Store};
+use crate::config::{IdSet, Settings, Store};
+use crate::editor::{Editor, Filmstrips};
 use crate::library::ClipIndex;
 use crate::media::{GameIcons, Thumbnails, Worker};
 
@@ -13,10 +14,14 @@ const SHELL_THREADS: usize = 4;
 
 pub struct AppState {
     pub settings: Mutex<Store<Settings>>,
-    pub favorites: Mutex<Store<Favorites>>,
+    pub favorites: Mutex<Store<IdSet>>,
+    /// Clips produced or modified by the editor.
+    pub edited: Mutex<Store<IdSet>>,
     pub index: RwLock<ClipIndex>,
     pub thumbnails: Thumbnails,
     pub icons: GameIcons,
+    pub filmstrips: Filmstrips,
+    pub editor: Editor,
     pub watcher: Mutex<Option<Debouncer<RecommendedWatcher>>>,
 }
 
@@ -26,9 +31,12 @@ impl AppState {
         Self {
             settings: Mutex::new(Store::load(config_dir.join("settings.json"))),
             favorites: Mutex::new(Store::load(config_dir.join("favorites.json"))),
+            edited: Mutex::new(Store::load(config_dir.join("edited.json"))),
             index: RwLock::default(),
             thumbnails: Thumbnails::new(cache_dir.join("thumbnails"), worker.clone()),
             icons: GameIcons::new(cache_dir.join("icons"), worker),
+            filmstrips: Filmstrips::new(cache_dir.join("filmstrips")),
+            editor: Editor::default(),
             watcher: Mutex::default(),
         }
     }

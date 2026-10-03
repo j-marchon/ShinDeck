@@ -5,10 +5,12 @@
   let {
     clips,
     onopen,
+    onedit,
     resetKey,
   }: {
     clips: Clip[];
     onopen: (clip: Clip) => void;
+    onedit: (clip: Clip) => void;
     /** Scroll back to the top whenever this value changes (view/sort/search). */
     resetKey: string;
   } = $props();
@@ -19,7 +21,7 @@
   const PAD = 24;
   const GAP = 18;
   const MIN_CARD = 250;
-  const META_HEIGHT = 56;
+  const META_HEIGHT = 58;
   const OVERSCAN_ROWS = 2;
 
   let scroller: HTMLDivElement;
@@ -76,7 +78,7 @@
   <div class="canvas" style:height="{totalHeight}px">
     {#each items as { clip, x, y } (clip.id)}
       <div class="slot" style:width="{cardWidth}px" style:height="{cardHeight}px" style:transform="translate({x}px, {y}px)">
-        <ClipCard {clip} {onopen} />
+        <ClipCard {clip} {onopen} {onedit} />
       </div>
     {/each}
   </div>

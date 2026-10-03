@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ShinDeck",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.shindeck.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "node scripts/fetch-ffmpeg.mjs && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && node scripts/fetch-ffmpeg.mjs",
     "frontendDist": "../dist"
   },
   "app": {
@@ -16,12 +16,14 @@
         "title": "ShinDeck",
         "width": 1360,
         "height": 860,
-        "minWidth": 900,
-        "minHeight": 600,
+        "minWidth": 960,
+        "minHeight": 640,
         "center": true,
         "theme": "Dark",
         "backgroundColor": "#0b0b0b",
-        "visible": true
+        "visible": true,
+        "decorations": false,
+        "shadow": true
       }
     ],
     "security": {
@@ -29,7 +31,7 @@
         "default-src": "'self'",
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: blob: thumb: http://thumb.localhost gameicon: http://gameicon.localhost",
+        "img-src": "'self' data: blob: thumb: http://thumb.localhost gameicon: http://gameicon.localhost filmstrip: http://filmstrip.localhost",
         "media-src": "'self' blob: asset: http://asset.localhost",
         "connect-src": "ipc: http://ipc.localhost"
       },
@@ -41,12 +43,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "ShinDeck",
     "category": "Video",
     "shortDescription": "Clip manager for NVIDIA ShadowPlay",
     "longDescription": "ShinDeck is a fast, lightweight gallery and player for NVIDIA ShadowPlay clips, organised by game.",
-    "copyright": "© 2026 ShinDeck",
+    "copyright": "\u00a9 2026 ShinDeck",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

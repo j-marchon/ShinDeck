@@ -12,6 +12,7 @@ use crate::state::AppState;
 
 pub const THUMBNAIL_SCHEME: &str = "thumb";
 pub const GAME_ICON_SCHEME: &str = "gameicon";
+pub const FILMSTRIP_SCHEME: &str = "filmstrip";
 
 /// `/Counter-strike%202/clip.mp4` -> `Counter-strike 2/clip.mp4`
 fn requested_key(request: &Request<Vec<u8>>) -> String {
@@ -64,5 +65,20 @@ pub fn game_icon<R: Runtime>(
         app.state::<AppState>()
             .icons
             .get(game, move |bytes| respond(responder, "image/png", bytes));
+    });
+}
+
+pub fn filmstrip<R: Runtime>(
+    ctx: UriSchemeContext<'_, R>,
+    request: Request<Vec<u8>>,
+    responder: UriSchemeResponder,
+) {
+    let app = ctx.app_handle().clone();
+    let id = requested_key(&request);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let entry = state.index.read().unwrap().get(&id).cloned();
+        let bytes = entry.and_then(|e| state.filmstrips.get(&e));
+        respond(responder, "image/jpeg", bytes);
     });
 }

@@ -1,6 +1,6 @@
-//! Persistent user data: settings and favorites.
+//! Persistent user data: settings, favorites and the "edited in ShinDeck" marks.
 //!
-//! Both live as small JSON files in the per-user app config directory
+//! All live as small JSON files in the per-user app config directory
 //! (`%APPDATA%\com.shindeck.app` on Windows) and are written atomically so a
 //! crash can never leave a half-written file behind.
 
@@ -13,11 +13,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
+/// What to do with the result of an edit (trim, cut, compress).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SaveMode {
+    /// Ask after every edit.
+    Ask,
+    /// Keep the original and save the result next to it.
+    New,
+    /// Overwrite the original clip.
+    Replace,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     /// Root folder that holds one sub-folder per captured game.
     pub library_path: Option<PathBuf>,
+    /// `None` until the user has made a choice the first time they edit.
+    pub save_mode: Option<SaveMode>,
 }
 
 impl Settings {
@@ -26,15 +40,16 @@ impl Settings {
     }
 }
 
-/// Favorites are keyed by clip id (path relative to the library root), so they
-/// survive moving the whole library to another drive.
+/// A set of clip ids (paths relative to the library root), used for favorites
+/// and edited marks. Relative ids survive moving the whole library.
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Favorites(BTreeSet<String>);
+pub struct IdSet(BTreeSet<String>);
 
-impl Favorites {
-    pub fn set(&mut self, id: &str, favorite: bool) -> bool {
-        if favorite {
+impl IdSet {
+    /// Adds or removes an id. Returns whether anything changed.
+    pub fn set(&mut self, id: &str, present: bool) -> bool {
+        if present {
             self.0.insert(id.to_owned())
         } else {
             self.0.remove(id)
@@ -43,6 +58,17 @@ impl Favorites {
 
     pub fn contains(&self, id: &str) -> bool {
         self.0.contains(id)
+    }
+
+    /// Moves a mark from one id to another (after a rename). Returns whether
+    /// anything changed.
+    pub fn rename(&mut self, from: &str, to: &str) -> bool {
+        if from != to && self.0.remove(from) {
+            self.0.insert(to.to_owned());
+            true
+        } else {
+            false
+        }
     }
 }
 

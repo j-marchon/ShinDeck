@@ -15,6 +15,9 @@ use std::path::{Path, PathBuf};
 use image::{RgbImage, RgbaImage};
 use windows::core::{GUID, HSTRING};
 use windows::Win32::Foundation::SIZE;
+use windows::Win32::Graphics::Dwm::{
+    DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+};
 use windows::Win32::Graphics::Gdi::{
     CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO,
     BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP,
@@ -219,4 +222,34 @@ pub fn file_icon(path: &Path, size: u32) -> Option<RgbaImage> {
         })
         .collect();
     RgbaImage::from_raw(bgra.width, bgra.height, rgba)
+}
+
+// ---------------------------------------------------------------------------
+// Window chrome
+// ---------------------------------------------------------------------------
+
+/// The window has no native title bar (the app draws its own). Windows 11
+/// still draws a 1px frame around it, by default in the system accent colour;
+/// tint it to match the app and keep the rounded corners.
+pub fn style_window(window: &tauri::WebviewWindow) {
+    let Ok(handle) = window.hwnd() else { return };
+    // Tauri links a different `windows` crate version; rewrap the raw handle.
+    let hwnd = windows::Win32::Foundation::HWND(handle.0);
+    // COLORREF is 0x00BBGGRR: a dim NVIDIA green (#3a5c0a).
+    let border: u32 = 0x000a_5c3a;
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_BORDER_COLOR,
+            &border as *const u32 as *const c_void,
+            std::mem::size_of::<u32>() as u32,
+        );
+        let corners = DWMWCP_ROUND;
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            &corners as *const _ as *const c_void,
+            std::mem::size_of_val(&corners) as u32,
+        );
+    }
 }

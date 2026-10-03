@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use serde::Serialize;
 
 use super::{display_game_name, mp4, Clip, ClipIndex, Game, Library, UNSORTED_GAME};
-use crate::config::Favorites;
+use crate::config::IdSet;
 use crate::error::{Error, Result};
 
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "m4v", "mov", "mkv", "webm"];
@@ -58,9 +58,16 @@ fn read_root(root: &Path) -> Result<RootListing> {
     Ok(RootListing { games, loose })
 }
 
+/// The per-clip flags stored outside the files themselves.
+pub struct Marks<'a> {
+    pub favorites: &'a IdSet,
+    pub edited: &'a IdSet,
+}
+
 fn as_video(entry: &DirEntry, game: &str) -> Option<Found> {
     let path = entry.path();
-    if !is_video(&path) {
+    // Dot-files are hidden; that is also how in-progress exports are named.
+    if !is_video(&path) || entry.file_name().to_string_lossy().starts_with('.') {
         return None;
     }
     // On Windows the metadata comes straight from the directory listing, so
@@ -106,38 +113,48 @@ fn clip_id(root: &Path, path: &Path) -> String {
     rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/")
 }
 
+fn make_clip(root: &Path, f: Found, marks: &Marks, previous: &ClipIndex) -> Clip {
+    let id = clip_id(root, &f.path);
+    let modified = millis(f.meta.modified()).unwrap_or(0);
+    // A copied file gets a fresh creation time but keeps its modification
+    // time; the earlier of the two is the capture time.
+    let date = millis(f.meta.created()).map_or(modified, |c| c.min(modified));
+    let size = f.meta.len();
+    let duration_ms =
+        previous.cached_duration(&id, size, modified).unwrap_or_else(|| mp4::duration_ms(&f.path));
+    let name = f.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    Clip {
+        favorite: marks.favorites.contains(&id),
+        edited: marks.edited.contains(&id),
+        id,
+        name,
+        path: f.path,
+        game: f.game,
+        size,
+        date,
+        modified,
+        duration_ms,
+    }
+}
+
+/// Builds the clip for a single file (after a rename or an export). The game
+/// is the first folder below the library root, exactly as a full scan does.
+pub fn clip_at(root: &Path, path: &Path, marks: &Marks, previous: &ClipIndex) -> Result<Clip> {
+    let meta = fs::metadata(path)?;
+    let rel = path.strip_prefix(root).unwrap_or(path);
+    let game = match rel.components().count() {
+        0 | 1 => UNSORTED_GAME.to_owned(),
+        _ => rel.components().next().unwrap().as_os_str().to_string_lossy().into_owned(),
+    };
+    Ok(make_clip(root, Found { path: path.to_path_buf(), game, meta }, marks, previous))
+}
+
 /// Scans the whole library. Durations are reused from `previous` for files
 /// that did not change, so rescans only parse new clips.
-pub fn scan(root: &Path, favorites: &Favorites, previous: &ClipIndex) -> Result<Library> {
+pub fn scan(root: &Path, marks: &Marks, previous: &ClipIndex) -> Result<Library> {
     let found = find_all(root)?;
-
-    let clips: Vec<Clip> = found
-        .into_par_iter()
-        .map(|f| {
-            let id = clip_id(root, &f.path);
-            let modified = millis(f.meta.modified()).unwrap_or(0);
-            // A copied file gets a fresh creation time but keeps its
-            // modification time; the earlier of the two is the capture time.
-            let date = millis(f.meta.created()).map_or(modified, |c| c.min(modified));
-            let size = f.meta.len();
-            let duration_ms = previous
-                .cached_duration(&id, size, modified)
-                .unwrap_or_else(|| mp4::duration_ms(&f.path));
-            let name =
-                f.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            Clip {
-                favorite: favorites.contains(&id),
-                id,
-                name,
-                path: f.path,
-                game: f.game,
-                size,
-                date,
-                modified,
-                duration_ms,
-            }
-        })
-        .collect();
+    let clips: Vec<Clip> =
+        found.into_par_iter().map(|f| make_clip(root, f, marks, previous)).collect();
 
     let mut games: HashMap<&str, Game> = HashMap::new();
     for clip in &clips {
@@ -193,6 +210,7 @@ mod tests {
             ("Counter-strike 2/screenshot.png", "x"),
             ("Valorant/highlights/Valorant 2025.01.03.mp4", "x"),
             ("loose clip.MP4", "x"),
+            ("Valorant/.export in progress.mp4", "x"),
             ("Empty Game/notes.txt", "x"),
         ] {
             let file = root.join(path);
@@ -200,9 +218,14 @@ mod tests {
             fs::write(file, contents).unwrap();
         }
 
-        let mut favorites = Favorites::default();
+        let mut favorites = IdSet::default();
         favorites.set("Valorant/highlights/Valorant 2025.01.03.mp4", true);
-        let library = scan(&root, &favorites, &ClipIndex::default()).unwrap();
+        let edited = IdSet::default();
+        let marks = Marks { favorites: &favorites, edited: &edited };
+        let library = scan(&root, &marks, &ClipIndex::default()).unwrap();
+        let single = root.join("Valorant/highlights/Valorant 2025.01.03.mp4");
+        let clip = clip_at(&root, &single, &marks, &ClipIndex::default()).unwrap();
+        assert_eq!((clip.game.as_str(), clip.favorite), ("Valorant", true));
         let _ = fs::remove_dir_all(&root);
 
         let mut clips: Vec<(&str, &str, bool)> =

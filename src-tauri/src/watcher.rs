@@ -19,7 +19,11 @@ pub fn watch(app: AppHandle, root: &Path) -> Option<Debouncer<RecommendedWatcher
     let mut debouncer = new_debouncer(DEBOUNCE, move |result: DebounceEventResult| {
         let Ok(events) = result else { return };
         // Videos, or extension-less paths (folders being added/removed/renamed).
-        let relevant = events.iter().any(|e| is_video(&e.path) || e.path.extension().is_none());
+        // Dot-files are the editor's work files and never shown.
+        let relevant = events.iter().any(|e| {
+            let hidden = e.path.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'));
+            !hidden && (is_video(&e.path) || e.path.extension().is_none())
+        });
         if relevant {
             let _ = app.emit(LIBRARY_CHANGED_EVENT, ());
         }

@@ -1,31 +1,63 @@
 import { api, type Clip, type Game } from "../api";
 import { storedValue } from "../util/storage";
 
-export type SortKey = "date" | "name" | "game" | "favorites";
+export type SortKey = "date" | "name" | "game" | "size";
 
-export type View = { kind: "all" } | { kind: "favorites" } | { kind: "game"; id: string };
+export interface SortOption {
+  key: SortKey;
+  descending: boolean;
+  label: string;
+}
 
-export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: "date", label: "Date" },
-  { key: "name", label: "Name" },
-  { key: "game", label: "Game" },
-  { key: "favorites", label: "Favorites" },
+export const SORT_OPTIONS: SortOption[] = [
+  { key: "date", descending: true, label: "Newest first" },
+  { key: "date", descending: false, label: "Oldest first" },
+  { key: "name", descending: false, label: "Name A–Z" },
+  { key: "name", descending: true, label: "Name Z–A" },
+  { key: "game", descending: false, label: "Game A–Z" },
+  { key: "game", descending: true, label: "Game Z–A" },
+  { key: "size", descending: true, label: "Largest first" },
+  { key: "size", descending: false, label: "Smallest first" },
 ];
 
-/** Natural direction per key: newest first, A→Z, favorites first. */
-const DEFAULT_DESCENDING: Record<SortKey, boolean> = {
-  date: true,
-  name: false,
-  game: false,
-  favorites: true,
-};
+export type DateRange = "any" | "today" | "week" | "month" | "year";
+
+export const DATE_RANGES: { key: DateRange; label: string }[] = [
+  { key: "any", label: "Any time" },
+  { key: "today", label: "Today" },
+  { key: "week", label: "Past 7 days" },
+  { key: "month", label: "Past 30 days" },
+  { key: "year", label: "Past year" },
+];
+
+function rangeStart(range: DateRange, now = Date.now()): number {
+  const day = 86_400_000;
+  switch (range) {
+    case "any":
+      return 0;
+    case "today": {
+      const d = new Date(now);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    }
+    case "week":
+      return now - 7 * day;
+    case "month":
+      return now - 30 * day;
+    case "year":
+      return now - 365 * day;
+  }
+}
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
-const sortPref = storedValue<{ key: SortKey; descending: boolean }>("sort", {
-  key: "date",
-  descending: true,
-});
+const sortPref = storedValue<{ key: SortKey; descending: boolean }>("sort", { key: "date", descending: true });
+
+function withoutId(set: ReadonlySet<string>, id: string): Set<string> {
+  const next = new Set(set);
+  next.delete(id);
+  return next;
+}
 
 /**
  * Single source of truth for the library. Arrays are `$state.raw` (no deep
@@ -39,29 +71,26 @@ class LibraryState {
   clips = $state.raw<Clip[]>([]);
   games = $state.raw<Game[]>([]);
   favorites = $state.raw<ReadonlySet<string>>(new Set());
+  edited = $state.raw<ReadonlySet<string>>(new Set());
 
-  view = $state<View>({ kind: "all" });
-  sortKey = $state<SortKey>(sortPref.get().key);
-  descending = $state(sortPref.get().descending);
+  // Filters: all of them combine.
+  game = $state<string | null>(null);
+  favoritesOnly = $state(false);
+  dateRange = $state<DateRange>("any");
   query = $state("");
 
+  sortKey = $state<SortKey>(sortPref.get().key);
+  descending = $state(sortPref.get().descending);
+
   gameById = $derived(new Map(this.games.map((g) => [g.id, g])));
-
   favoriteCount = $derived(this.favorites.size);
+  isFiltered = $derived(this.game !== null || this.favoritesOnly || this.dateRange !== "any" || this.query.trim() !== "");
+  sortLabel = $derived(
+    SORT_OPTIONS.find((o) => o.key === this.sortKey && o.descending === this.descending)?.label ?? "Sort",
+  );
 
-  /** Clips for the current view, search and sort, in display order. */
+  /** Clips matching every active filter, in display order. */
   visible = $derived.by(() => this.#computeVisible());
-
-  viewTitle = $derived.by(() => {
-    switch (this.view.kind) {
-      case "all":
-        return "All clips";
-      case "favorites":
-        return "Favorites";
-      case "game":
-        return this.gameName(this.view.id);
-    }
-  });
 
   gameName(id: string): string {
     return this.gameById.get(id)?.name ?? (id || "Unsorted");
@@ -71,19 +100,34 @@ class LibraryState {
     return this.favorites.has(id);
   }
 
+  isEdited(id: string): boolean {
+    return this.edited.has(id);
+  }
+
+  clearFilters() {
+    this.game = null;
+    this.favoritesOnly = false;
+    this.dateRange = "any";
+    this.query = "";
+  }
+
+  setSort(option: Pick<SortOption, "key" | "descending">) {
+    this.sortKey = option.key;
+    this.descending = option.descending;
+    sortPref.set({ key: option.key, descending: option.descending });
+  }
+
   async load({ silent = false } = {}) {
     if (!silent) this.status = "loading";
     try {
       const library = await api.scanLibrary();
       this.root = library.root;
-      this.clips = library.clips;
+      this.#setClips(library.clips);
       this.games = library.games;
-      this.favorites = new Set(library.clips.filter((c) => c.favorite).map((c) => c.id));
       this.error = null;
       this.status = "ready";
-      // The game being viewed may have disappeared (folder deleted/renamed).
-      const view = this.view;
-      if (view.kind === "game" && !this.gameById.has(view.id)) this.view = { kind: "all" };
+      // The selected game may have disappeared (folder deleted/renamed).
+      if (this.game !== null && !this.gameById.has(this.game)) this.game = null;
     } catch (e) {
       this.error = String(e);
       this.status = "error";
@@ -101,40 +145,51 @@ class LibraryState {
     }
   }
 
-  setSort(key: SortKey) {
-    if (key === this.sortKey) {
-      this.descending = !this.descending;
-    } else {
-      this.sortKey = key;
-      this.descending = DEFAULT_DESCENDING[key];
-    }
-    sortPref.set({ key: this.sortKey, descending: this.descending });
+  /** Renames on disk; returns the updated clip. Throws a readable message on failure. */
+  async rename(id: string, name: string): Promise<Clip> {
+    const clip = await api.renameClip(id, name);
+    this.upsert(clip, id);
+    return clip;
   }
 
-  toggleDirection() {
-    this.descending = !this.descending;
-    sortPref.set({ key: this.sortKey, descending: this.descending });
+  /**
+   * Adds or updates a clip returned by the backend (rename, export). Pass
+   * `previousId` when the clip's id changed.
+   */
+  upsert(clip: Clip, previousId?: string) {
+    const replacing = previousId ?? clip.id;
+    const exists = this.clips.some((c) => c.id === replacing);
+    this.#setClips(exists ? this.clips.map((c) => (c.id === replacing ? clip : c)) : [...this.clips, clip]);
+    if (!exists) {
+      this.games = this.games.map((g) => (g.id === clip.game ? { ...g, clipCount: g.clipCount + 1 } : g));
+    }
+  }
+
+  #setClips(clips: Clip[]) {
+    this.clips = clips;
+    this.favorites = new Set(clips.filter((c) => c.favorite).map((c) => c.id));
+    this.edited = new Set(clips.filter((c) => c.edited).map((c) => c.id));
   }
 
   #setFavoriteLocal(id: string, favorite: boolean) {
-    const next = new Set(this.favorites);
-    if (favorite) next.add(id);
-    else next.delete(id);
+    const next = favorite ? new Set(this.favorites).add(id) : withoutId(this.favorites, id);
     this.favorites = next;
+    // Keep the clip objects in sync so later upserts don't revert it.
+    this.clips = this.clips.map((c) => (c.id === id ? { ...c, favorite } : c));
   }
 
   #computeVisible(): Clip[] {
-    const { view, favorites } = this;
+    const { favorites, game, favoritesOnly } = this;
     const query = this.query.trim().toLowerCase();
+    const since = rangeStart(this.dateRange);
 
-    let list = this.clips;
-    if (view.kind === "favorites") list = list.filter((c) => favorites.has(c.id));
-    else if (view.kind === "game") list = list.filter((c) => c.game === view.id);
-    if (query) {
-      list = list.filter(
-        (c) => c.name.toLowerCase().includes(query) || this.gameName(c.game).toLowerCase().includes(query),
-      );
-    }
+    const list = this.clips.filter(
+      (c) =>
+        (game === null || c.game === game) &&
+        (!favoritesOnly || favorites.has(c.id)) &&
+        c.date >= since &&
+        (!query || c.name.toLowerCase().includes(query)),
+    );
 
     const dir = this.descending ? -1 : 1;
     const byDateDesc = (a: Clip, b: Clip) => b.date - a.date;
@@ -149,8 +204,8 @@ class LibraryState {
       case "game":
         primary = (a, b) => collator.compare(this.gameName(a.game), this.gameName(b.game));
         break;
-      case "favorites":
-        primary = (a, b) => Number(favorites.has(a.id)) - Number(favorites.has(b.id));
+      case "size":
+        primary = (a, b) => a.size - b.size;
         break;
     }
     // Ties always fall back to newest first.

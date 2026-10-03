@@ -1,16 +1,26 @@
 <script lang="ts">
-  import { library, SORT_OPTIONS } from "../state/library.svelte";
+  import { DATE_RANGES, library, SORT_OPTIONS } from "../state/library.svelte";
   import { plural } from "../util/format";
+  import Dropdown from "./Dropdown.svelte";
+  import GameFilter from "./GameFilter.svelte";
   import Icon from "./Icon.svelte";
 
   let {
     onrefresh,
+    onsettings,
     refreshing,
     shortcuts = true,
-  }: { onrefresh: () => void; refreshing: boolean; /** Disabled while the player is open. */ shortcuts?: boolean } =
-    $props();
+  }: {
+    onrefresh: () => void;
+    onsettings: () => void;
+    refreshing: boolean;
+    /** Disabled while the player is open. */
+    shortcuts?: boolean;
+  } = $props();
 
   let search: HTMLInputElement;
+
+  const dateLabel = $derived(DATE_RANGES.find((r) => r.key === library.dateRange)?.label ?? "Any time");
 
   function onwindowkeydown(e: KeyboardEvent) {
     if (!shortcuts) return;
@@ -32,99 +42,166 @@
 <svelte:window onkeydown={onwindowkeydown} />
 
 <header class="toolbar">
-  <div class="title">
-    <h1>{library.viewTitle}</h1>
-    <span class="count">{plural(library.visible.length, "clip")}</span>
-  </div>
+  <div class="filters">
+    <GameFilter />
 
-  <label class="search">
-    <Icon name="search" size={15} />
-    <input
-      bind:this={search}
-      bind:value={library.query}
-      onkeydown={onsearchkeydown}
-      type="text"
-      placeholder="Search clips"
-      spellcheck="false"
-    />
-    {#if library.query}
-      <button class="clear" aria-label="Clear search" onclick={() => (library.query = "")}>
-        <Icon name="close" size={14} />
-      </button>
+    <Dropdown width={180}>
+      {#snippet trigger({ open, toggle })}
+        <button class="chip" class:on={library.dateRange !== "any"} class:pressed={open} onclick={toggle}>
+          <Icon name="calendar" size={15} />
+          {dateLabel}
+          <Icon name="chevronDown" size={14} />
+        </button>
+      {/snippet}
+      {#snippet children(close)}
+        {#each DATE_RANGES as range (range.key)}
+          <button
+            class="menu-item"
+            class:active={library.dateRange === range.key}
+            onclick={() => {
+              library.dateRange = range.key;
+              close();
+            }}
+          >
+            {range.label}
+          </button>
+        {/each}
+      {/snippet}
+    </Dropdown>
+
+    <button
+      class="chip"
+      class:on={library.favoritesOnly}
+      aria-pressed={library.favoritesOnly}
+      title="Only show favorites"
+      onclick={() => (library.favoritesOnly = !library.favoritesOnly)}
+    >
+      <Icon name="star" size={15} filled={library.favoritesOnly} />
+      Favorites
+      <span class="badge">{library.favoriteCount}</span>
+    </button>
+
+    <label class="search" class:on={library.query}>
+      <Icon name="search" size={15} />
+      <input
+        bind:this={search}
+        bind:value={library.query}
+        onkeydown={onsearchkeydown}
+        type="text"
+        placeholder="Search by name"
+        spellcheck="false"
+      />
+      {#if library.query}
+        <button class="clear" aria-label="Clear search" onclick={() => (library.query = "")}>
+          <Icon name="close" size={14} />
+        </button>
+      {/if}
+    </label>
+
+    {#if library.isFiltered}
+      <button class="reset" onclick={() => library.clearFilters()}>Clear filters</button>
     {/if}
-  </label>
-
-  <div class="sort" role="group" aria-label="Sort by">
-    {#each SORT_OPTIONS as option (option.key)}
-      <button
-        class:active={library.sortKey === option.key}
-        aria-pressed={library.sortKey === option.key}
-        onclick={() => library.setSort(option.key)}
-      >
-        {option.label}
-      </button>
-    {/each}
   </div>
 
-  <button
-    class="icon-btn"
-    title={library.descending ? "Descending" : "Ascending"}
-    aria-label="Toggle sort direction"
-    onclick={() => library.toggleDirection()}
-  >
-    <Icon name={library.descending ? "sortDesc" : "sortAsc"} size={17} />
-  </button>
+  <div class="right">
+    <span class="count">{plural(library.visible.length, "clip")}</span>
 
-  <button class="icon-btn" class:spinning={refreshing} title="Rescan folder" aria-label="Rescan folder" onclick={onrefresh}>
-    <Icon name="refresh" size={16} />
-  </button>
+    <Dropdown align="right" width={190}>
+      {#snippet trigger({ open, toggle })}
+        <button class="chip" class:pressed={open} onclick={toggle} title="Sort order">
+          <Icon name={library.descending ? "sortDesc" : "sortAsc"} size={15} />
+          {library.sortLabel}
+          <Icon name="chevronDown" size={14} />
+        </button>
+      {/snippet}
+      {#snippet children(close)}
+        {#each SORT_OPTIONS as option (option.label)}
+          <button
+            class="menu-item"
+            class:active={library.sortKey === option.key && library.descending === option.descending}
+            onclick={() => {
+              library.setSort(option);
+              close();
+            }}
+          >
+            {option.label}
+          </button>
+        {/each}
+      {/snippet}
+    </Dropdown>
+
+    <button class="chip square" class:spinning={refreshing} title="Rescan folder" aria-label="Rescan folder" onclick={onrefresh}>
+      <Icon name="refresh" size={16} />
+    </button>
+    <button class="chip square" title="Settings" aria-label="Settings" onclick={onsettings}>
+      <Icon name="settings" size={16} />
+    </button>
+  </div>
 </header>
 
 <style>
   .toolbar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    height: 68px;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 64px;
     padding: 0 24px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
   }
-
-  .title {
+  .filters,
+  .right {
     display: flex;
-    align-items: baseline;
-    gap: 12px;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
-    margin-right: auto;
   }
-  h1 {
-    font-size: 20px;
-    font-weight: 700;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .right {
+    flex-shrink: 0;
   }
-  .count {
-    font-size: 13px;
-    color: var(--text-faint);
-    white-space: nowrap;
+  .chip.pressed {
+    border-color: var(--accent);
+  }
+  .chip.square {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .chip.square:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .badge {
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--surface-3);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+  .chip.on .badge {
+    background: rgb(118 185 0 / 0.2);
   }
 
   .search {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 240px;
+    width: 220px;
+    min-width: 120px;
+    flex-shrink: 1;
     height: 36px;
     padding: 0 10px 0 12px;
-    border-radius: 8px;
+    border-radius: 9px;
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text-faint);
     transition: border-color 0.12s ease;
   }
-  .search:focus-within {
+  .search:focus-within,
+  .search.on {
     border-color: var(--accent);
     color: var(--text-dim);
   }
@@ -135,7 +212,7 @@
     border: none;
     outline: none;
     color: var(--text);
-    font-size: 13.5px;
+    font-size: 13px;
   }
   .search input::placeholder {
     color: var(--text-faint);
@@ -148,47 +225,22 @@
   .clear:hover {
     color: var(--text);
   }
-
-  .sort {
-    display: flex;
-    padding: 3px;
-    border-radius: 9px;
-    background: var(--surface);
-    border: 1px solid var(--border);
+  .reset {
+    font-size: 12.5px;
+    color: var(--text-faint);
+    white-space: nowrap;
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
-  .sort button {
-    height: 28px;
-    padding: 0 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-dim);
-    transition:
-      background 0.12s ease,
-      color 0.12s ease;
-  }
-  .sort button:hover {
-    color: var(--text);
-  }
-  .sort button.active {
-    background: var(--accent);
-    color: #000;
-    font-weight: 600;
-  }
-
-  .icon-btn {
-    width: 36px;
-    height: 36px;
-    display: grid;
-    place-items: center;
-    border-radius: 8px;
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    background: var(--surface);
-  }
-  .icon-btn:hover {
+  .reset:hover {
     color: var(--accent);
-    border-color: var(--accent);
+  }
+
+  .count {
+    margin-right: 6px;
+    font-size: 13px;
+    color: var(--text-faint);
+    white-space: nowrap;
   }
   .spinning :global(svg) {
     animation: spin 0.8s linear infinite;

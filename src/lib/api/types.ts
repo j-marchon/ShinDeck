@@ -1,8 +1,25 @@
 /** Mirrors the serialized Rust types in `src-tauri/src`. */
 
+/** What happens to an edited clip. `ask` prompts after every edit. */
+export type SaveMode = "ask" | "new" | "replace";
+export type Destination = "new" | "replace";
+
 export interface Settings {
   libraryPath: string | null;
   setupComplete: boolean;
+  /** null until the user picks one (they're prompted on their first edit). */
+  saveMode: SaveMode | null;
+  /** False when the bundled ffmpeg is missing. */
+  editingAvailable: boolean;
+}
+
+export interface EditSpec {
+  /** Ranges to keep, in seconds. null keeps the whole clip. */
+  keep: [number, number][] | null;
+  /** Compress to fit this many bytes. */
+  targetBytes: number | null;
+  /** Tag for the new file's name, e.g. "trimmed" or "Discord". */
+  label: string;
 }
 
 export interface FolderSummary {
@@ -27,6 +44,8 @@ export interface Clip {
   modified: number;
   durationMs: number | null;
   favorite: boolean;
+  /** Produced or modified by ShinDeck's editor. */
+  edited: boolean;
 }
 
 export interface Game {
@@ -51,12 +70,24 @@ export interface Backend {
   scanLibrary(): Promise<Library>;
   setFavorite(id: string, favorite: boolean): Promise<void>;
   revealClip(id: string): Promise<void>;
+  renameClip(id: string, name: string): Promise<Clip>;
+  exportClip(id: string, spec: EditSpec, destination: Destination): Promise<Clip>;
+  cancelExport(): Promise<void>;
+  onExportProgress(handler: (progress: number) => void): Promise<() => void>;
+  setSaveMode(mode: SaveMode): Promise<Settings>;
   pickFolder(defaultPath?: string): Promise<string | null>;
   onLibraryChanged(handler: () => void): Promise<() => void>;
   toggleFullscreen(): Promise<boolean>;
+  minimizeWindow(): Promise<void>;
+  toggleMaximizeWindow(): Promise<void>;
+  closeWindow(): Promise<void>;
+  isMaximized(): Promise<boolean>;
+  onWindowResized(handler: () => void): Promise<() => void>;
   isFullscreen(): Promise<boolean>;
   setFullscreen(on: boolean): Promise<void>;
   videoUrl(clip: Clip): string;
   thumbnailUrl(clip: Clip): string;
   gameIconUrl(gameId: string): string;
+  /** A strip of 16 evenly spaced frames, for the trim bar. */
+  filmstripUrl(clip: Clip): string;
 }

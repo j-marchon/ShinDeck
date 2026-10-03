@@ -1,11 +1,21 @@
 <script lang="ts">
   import { api, type Clip } from "../api";
   import { library } from "../state/library.svelte";
-  import { formatDuration, formatRelativeDate } from "../util/format";
+  import { formatDuration, formatRelativeDate, formatSize } from "../util/format";
   import GameIcon from "./GameIcon.svelte";
   import Icon from "./Icon.svelte";
+  import InlineName from "./InlineName.svelte";
 
-  let { clip, onopen }: { clip: Clip; onopen: (clip: Clip) => void } = $props();
+  let {
+    clip,
+    onopen,
+    onedit,
+  }: {
+    clip: Clip;
+    onopen: (clip: Clip) => void;
+    /** Opens the player with the editor already showing. */
+    onedit: (clip: Clip) => void;
+  } = $props();
 
   // State is tracked per URL: when the file changes (e.g. ShadowPlay finished
   // writing it) the URL changes and the thumbnail is retried automatically.
@@ -27,9 +37,14 @@
     e.stopPropagation();
     library.toggleFavorite(clip.id);
   }
+
+  function edit(e: MouseEvent) {
+    e.stopPropagation();
+    onedit(clip);
+  }
 </script>
 
-<div class="card" role="button" tabindex="0" title={clip.name} onclick={() => onopen(clip)} {onkeydown}>
+<div class="card" role="button" tabindex="0" onclick={() => onopen(clip)} {onkeydown}>
   <div class="thumb">
     {#if thumbFailed}
       <div class="placeholder"><GameIcon game={clip.game} name={gameName} size={40} /></div>
@@ -47,15 +62,21 @@
 
     <div class="hover-play"><span><Icon name="play" size={22} /></span></div>
 
-    <button
-      class="star"
-      class:active={favorite}
-      aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
-      aria-pressed={favorite}
-      onclick={toggleFavorite}
-    >
-      <Icon name="star" size={17} filled={favorite} />
-    </button>
+    <div class="actions">
+      <button class="action edit" title="Edit clip" aria-label="Edit clip" onclick={edit}>
+        <Icon name="pencil" size={15} />
+      </button>
+      <button
+        class="action star"
+        class:active={favorite}
+        title={favorite ? "Remove from favorites" : "Add to favorites"}
+        aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+        aria-pressed={favorite}
+        onclick={toggleFavorite}
+      >
+        <Icon name="star" size={17} filled={favorite} />
+      </button>
+    </div>
 
     {#if clip.durationMs}
       <span class="duration">{formatDuration(clip.durationMs)}</span>
@@ -63,11 +84,11 @@
   </div>
 
   <div class="meta">
-    <div class="name">{clip.name}</div>
+    <InlineName {clip} />
     <div class="sub">
       <GameIcon game={clip.game} name={gameName} size={16} />
       <span class="game">{gameName}</span>
-      <span class="date">{formatRelativeDate(clip.date)}</span>
+      <span class="facts">{formatSize(clip.size)} · {formatRelativeDate(clip.date)}</span>
     </div>
   </div>
 </div>
@@ -164,34 +185,47 @@
     transform: scale(1);
   }
 
-  .star {
+  .actions {
     position: absolute;
     top: 8px;
     right: 8px;
+    display: flex;
+    gap: 6px;
+  }
+  .action {
     width: 32px;
     height: 32px;
     display: grid;
     place-items: center;
     border-radius: 8px;
     color: #fff;
-    background: rgb(0 0 0 / 0.55);
+    background: rgb(0 0 0 / 0.6);
     backdrop-filter: blur(6px);
     opacity: 0;
+    transform: translateY(-2px);
     transition:
       opacity 0.15s ease,
+      transform 0.15s ease,
       color 0.15s ease,
-      transform 0.1s ease;
+      background 0.15s ease;
   }
-  .card:hover .star,
-  .card:focus-visible .star,
+  .card:hover .action,
+  .card:focus-visible .action,
   .star.active {
     opacity: 1;
+    transform: none;
   }
-  .star:hover {
+  .action:hover {
     color: var(--accent);
+    background: rgb(0 0 0 / 0.8);
   }
-  .star:active {
+  .action:active {
     transform: scale(0.88);
+  }
+  .edit:hover {
+    color: #000;
+    background: var(--accent);
+    box-shadow: 0 0 12px rgb(118 185 0 / 0.6);
   }
   .star.active {
     color: var(--accent);
@@ -212,22 +246,11 @@
   }
 
   .meta {
-    padding: 10px 2px 0;
+    padding: 8px 2px 0;
     min-width: 0;
   }
-  .name {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .card:hover .name {
-    color: #fff;
-  }
   .sub {
-    margin-top: 5px;
+    margin-top: 3px;
     display: flex;
     align-items: center;
     gap: 7px;
@@ -240,7 +263,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .date {
+  .facts {
     margin-left: auto;
     flex-shrink: 0;
     color: var(--text-faint);

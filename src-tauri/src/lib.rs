@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod editor;
 mod error;
 mod library;
 mod media;
@@ -24,12 +25,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .register_asynchronous_uri_scheme_protocol(protocol::THUMBNAIL_SCHEME, protocol::thumbnail)
         .register_asynchronous_uri_scheme_protocol(protocol::GAME_ICON_SCHEME, protocol::game_icon)
+        .register_asynchronous_uri_scheme_protocol(protocol::FILMSTRIP_SCHEME, protocol::filmstrip)
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             let cache_dir = app.path().app_cache_dir()?;
             let state = AppState::new(&config_dir, &cache_dir);
             let library_path = state.settings.lock().unwrap().value.library_path.clone();
             app.manage(state);
+
+            if let Some(window) = app.get_webview_window("main") {
+                platform::style_window(&window);
+            }
 
             if let Some(root) = library_path {
                 commands::activate_library(app.handle(), &root);
@@ -44,6 +50,10 @@ pub fn run() {
             commands::scan_library,
             commands::set_favorite,
             commands::reveal_clip,
+            commands::set_save_mode,
+            commands::rename_clip,
+            commands::export_clip,
+            commands::cancel_export,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ShinDeck");

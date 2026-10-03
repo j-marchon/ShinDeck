@@ -33,6 +33,10 @@ jobs:
       - name: Type-check frontend
         run: npm run check
 
+      # The editor's ffmpeg is bundled as a sidecar; the Rust build checks it exists.
+      - name: Fetch bundled ffmpeg
+        run: node scripts/fetch-ffmpeg.mjs
+
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 

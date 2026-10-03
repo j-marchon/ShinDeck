@@ -12,10 +12,7 @@ export function formatDuration(ms: number | null): string {
   return ms == null ? "" : formatTime(ms / 1000);
 }
 
-const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
-const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: "long" });
-const shortDateFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-const fullDateFmt = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
+const dayMonthFmt = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
 const longFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 function startOfDay(t: number) {
@@ -24,14 +21,18 @@ function startOfDay(t: number) {
   return d.getTime();
 }
 
-/** Compact, human date for cards: "Today, 21:04", "Yesterday", "Friday", "Mar 4", "Mar 4, 2024". */
+/** "21 Aug '26" (day/month order follows the system locale). */
+export function formatShortDate(ms: number): string {
+  const year = String(new Date(ms).getFullYear() % 100).padStart(2, "0");
+  return `${dayMonthFmt.format(ms).replace(/\.$/, "")} '${year}`;
+}
+
+/** Compact date for cards: "Today", "Yesterday", otherwise "21 Aug '26". */
 export function formatRelativeDate(ms: number, now = Date.now()): string {
   const days = Math.round((startOfDay(now) - startOfDay(ms)) / 86_400_000);
-  if (days <= 0) return `Today, ${timeFmt.format(ms)}`;
+  if (days <= 0) return "Today";
   if (days === 1) return "Yesterday";
-  if (days < 7) return dayFmt.format(ms);
-  if (new Date(ms).getFullYear() === new Date(now).getFullYear()) return shortDateFmt.format(ms);
-  return fullDateFmt.format(ms);
+  return formatShortDate(ms);
 }
 
 export function formatLongDate(ms: number): string {
@@ -50,4 +51,10 @@ export function formatSize(bytes: number): string {
 
 export function plural(n: number, word: string): string {
   return `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+}
+
+/** "10 MB" style label for size targets. */
+export function formatMegabytes(bytes: number): string {
+  const mb = bytes / 1_000_000;
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`;
 }

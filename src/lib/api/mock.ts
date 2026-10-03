@@ -15,6 +15,13 @@ const GAMES: [string, number, number][] = [
   ["ELDEN RING", 12, 45],
   ["Cyberpunk 2077", 9, 58],
   ["Fortnite", 15, 270],
+  ["Overwatch 2", 5, 28],
+  ["Dead by Daylight", 14, 0],
+  ["Grand Theft Auto V", 4, 130],
+  ["Ready Or Not", 4, 190],
+  ["Resident Evil 2 Biohazard RE2", 2, 345],
+  ["Slapshot Rebound", 26, 330],
+  ["Helldivers 2", 11, 50],
   ["Desktop", 4, 200],
 ];
 
@@ -24,40 +31,55 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 function shadowplayName(game: string, d: Date) {
   return `${game} ${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} - ${pad(d.getHours())}.${pad(
     d.getMinutes(),
-  )}.${pad(d.getSeconds())}.${pad(Math.floor(Math.random() * 99))}.DVR`;
+  )}.${pad(d.getSeconds())}.${pad(d.getMilliseconds() % 99)}.DVR`;
 }
 
-function buildLibrary(root: string): Library {
-  const clips: Clip[] = [];
+let root = "C:\\Videos";
+const favorites = new Set<string>();
+const edited = new Set<string>();
+let clips: Clip[] = [];
+let settings: Settings = { libraryPath: null, setupComplete: false, saveMode: null, editingAvailable: true };
+const progressHandlers = new Set<(p: number) => void>();
+let cancelled = false;
+
+function generate() {
   let seed = 7;
-  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  clips = [];
   for (const [game, count] of GAMES) {
     for (let i = 0; i < count; i++) {
-      const date = Date.now() - Math.floor(rand() * 120 * 86400_000);
+      const date = Date.now() - Math.floor(rand() * 500 * 86400_000);
       const name = shadowplayName(game, new Date(date));
-      const id = `${game}/${name}.mp4`;
-      clips.push({
-        id,
-        name,
-        path: `${root}\\${game}\\${name}.mp4`,
-        game,
-        size: Math.floor(30e6 + rand() * 400e6),
-        date,
-        modified: date,
-        durationMs: Math.floor(15_000 + rand() * 285_000),
-        favorite: favorites.has(id),
-      });
+      clips.push(makeClip(game, name, date, Math.floor(30e6 + rand() * 400e6), Math.floor(15_000 + rand() * 285_000)));
     }
   }
-  const games: Game[] = GAMES.map(([name]) => {
-    const own = clips.filter((c) => c.game === name);
-    return { id: name, name, clipCount: own.length, latest: Math.max(...own.map((c) => c.date)) };
-  }).sort((a, b) => a.name.localeCompare(b.name));
-  return { root, games, clips };
 }
 
-const favorites = new Set<string>();
-let settings: Settings = { libraryPath: null, setupComplete: false };
+function makeClip(game: string, name: string, date: number, size: number, durationMs: number): Clip {
+  const id = `${game}/${name}.mp4`;
+  return {
+    id,
+    name,
+    path: `${root}\\${game}\\${name}.mp4`,
+    game,
+    size,
+    date,
+    modified: date,
+    durationMs,
+    favorite: favorites.has(id),
+    edited: edited.has(id),
+  };
+}
+
+function library(): Library {
+  const games: Game[] = GAMES.map(([name]) => {
+    const own = clips.filter((c) => c.game === name);
+    return { id: name, name, clipCount: own.length, latest: Math.max(0, ...own.map((c) => c.date)) };
+  })
+    .filter((g) => g.clipCount > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return { root, games, clips: clips.map((c) => ({ ...c, favorite: favorites.has(c.id), edited: edited.has(c.id) })) };
+}
 
 function svgUrl(svg: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -65,6 +87,12 @@ function svgUrl(svg: string) {
 
 function hueOf(game: string) {
   return GAMES.find(([g]) => g === game)?.[2] ?? 120;
+}
+
+function find(id: string) {
+  const clip = clips.find((c) => c.id === id);
+  if (!clip) throw new Error("Clip not found");
+  return clip;
 }
 
 export const mockBackend: Backend = {
@@ -82,12 +110,15 @@ export const mockBackend: Backend = {
       : { exists, gameCount: 0, clipCount: 0 };
   },
   async setLibraryPath(path) {
-    settings = { libraryPath: path, setupComplete: true };
+    root = path;
+    settings = { ...settings, libraryPath: path, setupComplete: true };
+    generate();
     return settings;
   },
   async scanLibrary() {
     await delay(250);
-    return buildLibrary(settings.libraryPath ?? "C:\\Videos");
+    if (!clips.length) generate();
+    return library();
   },
   async setFavorite(id, favorite) {
     if (favorite) favorites.add(id);
@@ -95,6 +126,53 @@ export const mockBackend: Backend = {
   },
   async revealClip(id) {
     console.info("[mock] reveal", id);
+  },
+  async renameClip(id, name) {
+    await delay(120);
+    name = name.trim();
+    if (!name) throw new Error("The name can't be empty");
+    if (/[<>:"/\\|?*]/.test(name)) throw new Error("Names can't contain < > : \" / \\ | ? *");
+    const clip = find(id);
+    const renamed = makeClip(clip.game, name, clip.date, clip.size, clip.durationMs ?? 0);
+    if (renamed.id !== id && clips.some((c) => c.id === renamed.id)) throw new Error("Another clip already has that name");
+    for (const set of [favorites, edited]) if (set.delete(id)) set.add(renamed.id);
+    clips = clips.map((c) => (c.id === id ? renamed : c));
+    return { ...renamed, favorite: favorites.has(renamed.id), edited: edited.has(renamed.id) };
+  },
+  async exportClip(id, spec, destination) {
+    cancelled = false;
+    const clip = find(id);
+    for (let p = 0; p <= 1.0001; p += 0.05) {
+      if (cancelled) throw new Error("Cancelled");
+      progressHandlers.forEach((h) => h(Math.min(1, p)));
+      await delay(70);
+    }
+    const kept = spec.keep ? spec.keep.reduce((t, [a, b]) => t + (b - a), 0) * 1000 : (clip.durationMs ?? 0);
+    const size = spec.targetBytes ? Math.round(spec.targetBytes * 0.93) : Math.round((clip.size * kept) / (clip.durationMs || 1));
+    const now = Date.now();
+    if (destination === "replace") {
+      const updated = { ...clip, size, durationMs: Math.round(kept), modified: now };
+      clips = clips.map((c) => (c.id === id ? updated : c));
+      edited.add(id);
+      return { ...updated, edited: true, favorite: favorites.has(id) };
+    }
+    let name = `${clip.name} (${spec.label})`;
+    for (let n = 2; clips.some((c) => c.name === name && c.game === clip.game); n++) name = `${clip.name} (${spec.label}) (${n})`;
+    const created = { ...makeClip(clip.game, name, clip.date, size, Math.round(kept)), modified: now };
+    clips = [...clips, created];
+    edited.add(created.id);
+    return { ...created, edited: true };
+  },
+  async cancelExport() {
+    cancelled = true;
+  },
+  async onExportProgress(handler) {
+    progressHandlers.add(handler);
+    return () => progressHandlers.delete(handler);
+  },
+  async setSaveMode(mode) {
+    settings = { ...settings, saveMode: mode };
+    return settings;
   },
   async pickFolder() {
     return "D:\\Captures\\ShadowPlay";
@@ -114,7 +192,18 @@ export const mockBackend: Backend = {
     await this.setFullscreen(next);
     return next;
   },
-  videoUrl: (clip) => `/dev-media/sample.webm?clip=${encodeURIComponent(clip.id)}`,
+  async minimizeWindow() {},
+  async toggleMaximizeWindow() {},
+  async closeWindow() {
+    console.info("[mock] close window");
+  },
+  async isMaximized() {
+    return false;
+  },
+  async onWindowResized() {
+    return () => {};
+  },
+  videoUrl: (clip) => `/dev-media/sample.webm?clip=${encodeURIComponent(clip.id)}&v=${clip.modified}`,
   thumbnailUrl(clip) {
     const h = hueOf(clip.game);
     const x = (clip.date % 300) + 40;
@@ -124,10 +213,18 @@ export const mockBackend: Backend = {
   },
   gameIconUrl(gameId) {
     // Leave some games without an icon to exercise the monogram fallback.
-    if (["Fortnite", "Cyberpunk 2077"].includes(gameId)) return "data:,missing";
+    if (["Fortnite", "Cyberpunk 2077", "Ready Or Not"].includes(gameId)) return "data:,missing";
     const h = hueOf(gameId);
     return svgUrl(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="hsl(${h} 70% 45%)"/><path d="M20 44 32 16 44 44Z" fill="#fff" opacity=".9"/></svg>`,
     );
+  },
+  filmstripUrl(clip) {
+    const h = hueOf(clip.game);
+    const frames = Array.from({ length: 16 }, (_, i) => {
+      const hue = (h + i * 9) % 360;
+      return `<rect x="${i * 192}" width="192" height="108" fill="hsl(${hue} 40% ${18 + (i % 4) * 5}%)"/><circle cx="${i * 192 + 60 + ((i * 37) % 80)}" cy="60" r="26" fill="hsl(${hue} 60% 55% / .35)"/>`;
+    }).join("");
+    return svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3072 108">${frames}</svg>`);
   },
 };

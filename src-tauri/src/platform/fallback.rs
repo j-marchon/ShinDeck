@@ -33,3 +33,5 @@ pub fn reveal_in_file_manager(path: &Path) -> std::io::Result<()> {
     let program = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
     std::process::Command::new(program).arg(dir).spawn().map(|_| ())
 }
+
+pub fn style_window(_window: &tauri::WebviewWindow) {}

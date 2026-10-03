@@ -3,7 +3,7 @@
 mod mp4;
 mod scanner;
 
-pub use scanner::{inspect_folder, is_video, scan, FolderSummary};
+pub use scanner::{clip_at, inspect_folder, is_video, scan, FolderSummary, Marks};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -32,6 +32,8 @@ pub struct Clip {
     pub modified: u64,
     pub duration_ms: Option<u64>,
     pub favorite: bool,
+    /// Produced or modified by ShinDeck's editor.
+    pub edited: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -86,15 +88,25 @@ impl ClipIndex {
         }
     }
 
+    /// Registers (or refreshes) a single clip, e.g. after a rename or export.
+    pub(crate) fn upsert(&mut self, clip: &Clip) {
+        self.entries.insert(
+            clip.id.clone(),
+            IndexEntry { path: clip.path.clone(), size: clip.size, modified: clip.modified },
+        );
+        self.durations.insert(clip.id.clone(), (clip.size, clip.modified, clip.duration_ms));
+    }
+
+    pub(crate) fn remove(&mut self, id: &str) {
+        self.entries.remove(id);
+        self.durations.remove(id);
+    }
+
     pub(crate) fn replace(&mut self, library: &Library) {
         self.entries.clear();
         self.durations.clear();
         for clip in &library.clips {
-            self.entries.insert(
-                clip.id.clone(),
-                IndexEntry { path: clip.path.clone(), size: clip.size, modified: clip.modified },
-            );
-            self.durations.insert(clip.id.clone(), (clip.size, clip.modified, clip.duration_ms));
+            self.upsert(clip);
         }
     }
 }

@@ -11,7 +11,7 @@ pub use worker::Worker;
 
 /// FNV-1a: tiny, fast and stable across builds (unlike `DefaultHasher`),
 /// which matters because hashes name files in the on-disk cache.
-pub(crate) fn stable_hash(parts: &[&[u8]]) -> u64 {
+pub fn stable_hash(parts: &[&[u8]]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for part in parts {
         for &byte in *part {
