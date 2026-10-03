@@ -1,21 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
-  import { api, type Clip, type EditSpec } from "../../api";
+  import { api, type Clip } from "../../api";
   import { editor } from "../../state/editor.svelte";
   import { library } from "../../state/library.svelte";
   import { formatLongDate, formatSize, formatTime } from "../../util/format";
   import { storedValue } from "../../util/storage";
-  import {
-    isUnchanged,
-    keptDuration,
-    keptSegments,
-    newTrim,
-    skipTarget,
-    type TrimState,
-  } from "../../util/trim";
+  import { exportSpec, jobLabel, noEdits, renameTo, type PendingEdits } from "../../util/pending";
+  import { isUnchanged, keptDuration, newTrim, skipTarget, type TrimState } from "../../util/trim";
   import GameIcon from "../GameIcon.svelte";
   import Icon, { type IconName } from "../Icon.svelte";
-  import InlineName from "../InlineName.svelte";
   import Slider from "../Slider.svelte";
   import EditPanel from "./EditPanel.svelte";
   import SavePrompt from "./SavePrompt.svelte";
@@ -71,7 +64,11 @@
   // svelte-ignore state_referenced_locally
   let editing = $state(startEditing);
   let trimming = $state(false);
+  /** Working copy while in trim mode; committed to `pending` with Done. */
   let trim = $state<TrimState>(newTrim(0));
+  /** Edits staged in the panel; applied only when Save is pressed. */
+  // svelte-ignore state_referenced_locally
+  let pending = $state<PendingEdits>(noEdits(list[index]));
 
   let controlsVisible = $state(true);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
@@ -99,12 +96,14 @@
 
   $effect(() => prefs.set({ volume, muted }));
 
-  // A new clip resets per-clip state; speed and volume carry over.
+  // A new clip resets per-clip state (including unsaved edits); speed and
+  // volume carry over.
   $effect(() => {
     void clip.id;
     failed = false;
     bufferedEnd = 0;
     trimming = false;
+    pending = noEdits(clip);
   });
 
   $effect(() => {
@@ -234,62 +233,89 @@
 
   function startTrim() {
     if (!duration) return;
-    trim = newTrim(duration);
+    trim = pending.trim ? { ...$state.snapshot(pending.trim), pending: null } : newTrim(duration);
     trimming = true;
+    editing = true;
     video.pause();
     poke();
   }
 
   function cancelTrim() {
     trimming = false;
-    trim = newTrim(duration);
   }
 
-  async function saveTrim() {
-    if (isUnchanged(trim, duration)) return cancelTrim();
-    const spec: EditSpec = { keep: keptSegments(trim), targetBytes: null, label: "trimmed" };
-    if (await runEdit(spec, trim.cuts.length ? "Cutting" : "Trimming")) trimming = false;
+  /** Stages the trim; nothing is written until Save. */
+  function doneTrim() {
+    pending.trim = isUnchanged(trim, duration) ? null : { ...$state.snapshot(trim), pending: null };
+    trimming = false;
   }
 
-  function compress(targetBytes: number, label: string) {
-    runEdit({ keep: null, targetBytes, label }, `Compressing for ${label}`);
+  function discard() {
+    pending = noEdits(clip);
+    editor.error = null;
   }
 
-  /** Resolves where to save, runs the export and shows the result. */
-  async function runEdit(spec: EditSpec, jobLabel: string): Promise<boolean> {
-    const destination = await editor.destination();
-    if (!destination) return false;
+  /** Applies every staged edit: one export for trim/compress, then the rename. */
+  async function save() {
+    if (editor.running || editor.prompt) return;
     const source = clip;
-    if (destination === "replace") {
-      // Let go of the file so Windows allows replacing it.
-      video.pause();
-      released = true;
-      await tick();
-      video.load();
-    }
-    const result = await editor.export(source, spec, destination, jobLabel);
-    released = false;
-    if (!result) return false;
+    const name = renameTo(pending, source);
+    const spec = exportSpec(pending);
+    editor.error = null;
+    let current = source;
+    let created = false;
 
-    if (destination === "replace") {
-      list = list.map((c) => (c.id === source.id ? result : c));
-      library.upsert(result, source.id);
-    } else {
-      list = [...list.slice(0, index + 1), result, ...list.slice(index + 1)];
-      library.upsert(result);
-      index += 1;
+    if (spec) {
+      const destination = await editor.destination();
+      if (!destination) return;
+      if (destination === "replace") {
+        // Let go of the file so Windows allows replacing it.
+        video.pause();
+        released = true;
+        await tick();
+        video.load();
+      }
+      const result = await editor.export(source, spec, destination, jobLabel(pending));
+      released = false;
+      if (!result) return;
+      if (destination === "replace") {
+        list = list.map((c) => (c.id === source.id ? result : c));
+        library.upsert(result, source.id);
+      } else {
+        list = [...list.slice(0, index + 1), result, ...list.slice(index + 1)];
+        library.upsert(result);
+        created = true;
+      }
+      current = result;
     }
-    return true;
-  }
 
-  function onrenamed(renamed: Clip, previousId: string) {
-    list = list.map((c) => (c.id === previousId ? renamed : c));
+    if (name) {
+      try {
+        const renamed = await library.rename(current.id, name);
+        list = list.map((c) => (c.id === current.id ? renamed : c));
+        current = renamed;
+        if (!spec) editor.notify("Renamed");
+      } catch (e) {
+        const message = String(e).replace(/^Error: /, "");
+        editor.error = spec ? `Saved, but the rename failed: ${message}` : message;
+        return;
+      }
+    }
+
+    if (created) index = list.findIndex((c) => c.id === current.id);
+    pending = noEdits(current);
   }
 
   // --- keyboard ----------------------------------------------------------
 
   function onkeydown(e: KeyboardEvent) {
-    if (e.ctrlKey || e.altKey || e.metaKey || editor.prompt) return;
+    if (editor.prompt) return;
+    if (e.ctrlKey && e.key.toLowerCase() === "s" && editing) {
+      e.preventDefault();
+      save();
+      return;
+    }
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
     const target = e.target as HTMLElement;
     if (target.matches("input, textarea, select")) return;
     const handled = () => {
@@ -326,7 +352,7 @@
         else close();
         return handled();
       case "Enter":
-        if (trimming && !editor.running) saveTrim();
+        if (trimming) doneTrim();
         return handled();
       case "n":
       case "N":
@@ -381,7 +407,8 @@
     ["F", "Fullscreen"],
     ["S", "Favorite"],
     ["E", "Edit panel"],
-    ["Enter", "Save trim (while trimming)"],
+    ["Enter", "Done (while trimming)"],
+    ["Ctrl + S", "Save edits"],
     ["Esc", "Leave trim / back to gallery"],
   ];
 </script>
@@ -399,7 +426,7 @@
       onclick={(e) => {
         e.stopPropagation();
         go(-1);
-      }}><Icon name="chevronLeft" size={30} /></button
+      }}><Icon name="chevronLeft" size={26} /></button
     >
     <button
       class="nav next"
@@ -409,65 +436,59 @@
       onclick={(e) => {
         e.stopPropagation();
         go(1);
-      }}><Icon name="chevronRight" size={30} /></button
+      }}><Icon name="chevronRight" size={26} /></button
     >
   {/if}
 
-  <div
-    class="panel"
-    class:editing
-    class:trimming
-    class:idle={!controlsVisible}
-    role="dialog"
-    aria-modal="true"
-    aria-label={clip.name}
-    tabindex="-1"
-    onclick={(e) => e.stopPropagation()}
-    onpointermove={poke}
-  >
-    <div class="main">
+  <div class="layout" class:editing class:trimming onclick={(e) => e.stopPropagation()}>
+    <div
+      class="player card"
+      class:idle={!controlsVisible}
+      role="dialog"
+      aria-modal="true"
+      aria-label={clip.name}
+      tabindex="-1"
+      onpointermove={poke}
+    >
       <header class="head dimmable">
-        <button class="round" onclick={close} title="Back to gallery (Esc)" aria-label="Back to gallery">
-          <Icon name="back" size={20} />
+        <button class="icon-btn" onclick={close} title="Back to gallery (Esc)" aria-label="Back to gallery">
+          <Icon name="back" size={18} />
         </button>
         <div class="info">
-          <InlineName {clip} onrenamed={(c) => onrenamed(c, clip.id)} />
+          <div class="title">
+            {#if library.isEdited(clip.id)}<span class="edited" title="Edited in ShinDeck"><Icon name="pencil" size={12} /></span>{/if}
+            <span>{clip.name}</span>
+          </div>
           <div class="sub">
-            <GameIcon game={clip.game} name={gameName} size={15} />
+            <GameIcon game={clip.game} name={gameName} size={14} />
             <span>{gameName}</span>
-            <span class="dot">•</span>
+            <span class="dot">·</span>
             <span>{formatLongDate(clip.date)}</span>
-            <span class="dot">•</span>
+            <span class="dot">·</span>
             <span>{formatSize(clip.size)}</span>
           </div>
         </div>
         <span class="position">{index + 1} / {list.length}</span>
         <button
-          class="round"
+          class="icon-btn"
           class:starred={favorite}
           onclick={() => library.toggleFavorite(clip.id)}
           title={favorite ? "Remove from favorites (S)" : "Add to favorites (S)"}
           aria-label="Favorite"
           aria-pressed={favorite}
         >
-          <Icon name="star" size={18} filled={favorite} />
+          <Icon name="star" size={17} filled={favorite} />
         </button>
-        <button class="round" onclick={() => api.revealClip(clip.id)} title="Show in folder" aria-label="Show in folder">
-          <Icon name="folderOpen" size={18} />
+        <button class="icon-btn" onclick={() => api.revealClip(clip.id)} title="Show in folder" aria-label="Show in folder">
+          <Icon name="folderOpen" size={17} />
         </button>
-        <button
-          class="edit-btn"
-          class:active={editing}
-          aria-pressed={editing}
-          title="Edit (E)"
-          onclick={() => (editing = !editing)}
-        >
-          <Icon name="pencil" size={15} />
+        <button class="edit-btn" class:active={editing} aria-pressed={editing} title="Edit (E)" onclick={() => (editing = !editing)}>
+          <Icon name="pencil" size={14} />
           Edit
         </button>
       </header>
 
-      <div class="stage spotlight">
+      <div class="stage">
         <!-- svelte-ignore a11y_media_has_caption -->
         <video
           bind:this={video}
@@ -495,7 +516,7 @@
           <div class="overlay-msg"><span class="spinner"></span> Saving edit…</div>
         {:else if failed}
           <div class="failure">
-            <Icon name="alert" size={34} />
+            <Icon name="alert" size={30} />
             <h2>This clip can't be played</h2>
             <p>
               The file may be damaged or use a codec Windows can't decode. HEVC (H.265) recordings need the
@@ -508,14 +529,14 @@
         {#if osd}
           {#key osd.id}
             <div class="osd" class:pill={!!osd.text}>
-              {#if osd.icon}<Icon name={osd.icon} size={osd.text ? 18 : 30} />{/if}
+              {#if osd.icon}<Icon name={osd.icon} size={osd.text ? 18 : 28} />{/if}
               {#if osd.text}<span>{osd.text}</span>{/if}
             </div>
           {/key}
         {/if}
 
         {#if showHelp}
-          <div class="help" role="dialog" aria-label="Keyboard shortcuts">
+          <div class="help glass-panel" role="dialog" aria-label="Keyboard shortcuts">
             <h3>Keyboard shortcuts</h3>
             <dl>
               {#each SHORTCUTS as [key, action] (key)}
@@ -527,35 +548,19 @@
         {/if}
       </div>
 
-      <div class="bar spotlight" onmousedown={(e) => e.preventDefault()} role="toolbar" tabindex="-1">
+      <div class="bar" onmousedown={(e) => e.preventDefault()} role="toolbar" tabindex="-1">
         {#if trimming}
           <div class="trim-head">
-            <span class="trim-title"><Icon name="scissors" size={15} /> Trim & Cut</span>
-            <span class="trim-hint">Drag the green handles to trim · Right-click the film twice to cut out a part</span>
+            <span class="trim-title"><Icon name="scissors" size={14} /> Trim & Cut</span>
+            <span class="trim-hint">Drag the handles to trim · right-click the film twice to cut out a part</span>
             <span class="keep">Keeping <b>{formatTime(kept)}</b> of {formatTime(duration)}</span>
-            {#if editor.running}
-              <div class="trim-progress">
-                <span>{editor.label}… {Math.round(editor.progress * 100)}%</span>
-                <div class="mini-track"><div style:width="{editor.progress * 100}%"></div></div>
-              </div>
-              <button class="ghost" onclick={() => editor.cancel()}>Stop</button>
-            {:else}
-              {#if editor.error}<span class="trim-error" title={editor.error}>{editor.error}</span>{/if}
-              <button class="ghost" onclick={() => (trim = newTrim(duration))}>Reset</button>
-              <button class="ghost" onclick={cancelTrim}>Cancel</button>
-              <button class="save" disabled={kept < 0.5} onclick={saveTrim}>
-                <Icon name="check" size={15} /> Save
-              </button>
-            {/if}
+            <button class="btn-ghost" onclick={() => (trim = newTrim(duration))}>Reset</button>
+            <button class="btn-ghost" onclick={cancelTrim}>Cancel</button>
+            <button class="btn-primary done" disabled={kept < 0.5} onclick={doneTrim}>
+              <Icon name="check" size={14} /> Done
+            </button>
           </div>
-          <TrimBar
-            {duration}
-            {currentTime}
-            filmstrip={api.filmstripUrl(clip)}
-            bind:trim
-            onseek={seekTo}
-            onscrub={scrub}
-          />
+          <TrimBar {duration} {currentTime} filmstrip={api.filmstripUrl(clip)} bind:trim onseek={seekTo} onscrub={scrub} />
         {:else}
           <Slider
             value={progress}
@@ -573,18 +578,18 @@
         <div class="row">
           <div class="group">
             <button class="ctl" onclick={() => go(-1)} disabled={!hasPrev || trimming} title="Previous clip (P)" aria-label="Previous clip">
-              <Icon name="prev" size={17} />
+              <Icon name="prev" size={16} />
             </button>
             <button class="ctl play" onclick={togglePlay} title={paused ? "Play (Space)" : "Pause (Space)"} aria-label={paused ? "Play" : "Pause"}>
-              <Icon name={paused ? "play" : "pause"} size={19} />
+              <Icon name={paused ? "play" : "pause"} size={17} />
             </button>
             <button class="ctl" onclick={() => go(1)} disabled={!hasNext || trimming} title="Next clip (N)" aria-label="Next clip">
-              <Icon name="next" size={17} />
+              <Icon name="next" size={16} />
             </button>
 
             <div class="volume">
               <button class="ctl" onclick={toggleMute} title="Mute (M)" aria-label="Mute">
-                <Icon name={muted || volume === 0 ? "mute" : volume < 0.5 ? "volumeLow" : "volume"} size={18} />
+                <Icon name={muted || volume === 0 ? "mute" : volume < 0.5 ? "volumeLow" : "volume"} size={17} />
               </button>
               <div class="volume-slider">
                 <Slider
@@ -618,24 +623,26 @@
               >
             </div>
             <button class="ctl" onclick={() => (showHelp = !showHelp)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
-              <Icon name="keyboard" size={18} />
+              <Icon name="keyboard" size={17} />
             </button>
             <button class="ctl" onclick={toggleFullscreen} title="Fullscreen (F)" aria-label="Fullscreen">
-              <Icon name={fullscreen ? "minimize" : "maximize"} size={17} />
+              <Icon name={fullscreen ? "minimize" : "maximize"} size={16} />
             </button>
           </div>
         </div>
       </div>
     </div>
 
-    <aside class="side dimmable" aria-hidden={!editing} inert={!editing}>
-      <div class="side-inner">
+    <aside class="side" aria-hidden={!editing} inert={!editing}>
+      <div class="side-card card dimmable">
         <EditPanel
           {clip}
+          bind:pending
+          {duration}
           onclose={() => (editing = false)}
           onstarttrim={startTrim}
-          oncompress={compress}
-          {onrenamed}
+          onsave={save}
+          ondiscard={discard}
         />
       </div>
     </aside>
@@ -650,17 +657,20 @@
   /* --- frame --------------------------------------------------------- */
   .backdrop {
     position: fixed;
-    inset: 36px 0 0 0;
+    inset: 30px 0 0 0;
     z-index: 40;
-    display: grid;
-    place-items: center;
-    background: rgb(0 0 0 / 0.86);
-    backdrop-filter: blur(8px) saturate(0.6);
-    animation: fade-in 0.18s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px 84px 28px;
+    background: rgb(0 0 0 / 0.72);
+    backdrop-filter: blur(16px) saturate(0.6);
+    animation: fade-in 0.2s ease;
   }
   .backdrop.fullscreen {
     inset: 0;
     z-index: 60;
+    padding: 0;
     background: #000;
   }
   @keyframes fade-in {
@@ -669,120 +679,116 @@
     }
   }
 
-  .panel {
-    position: relative;
-    width: min(1560px, calc(100vw - 150px));
-    height: min(940px, calc(100vh - 36px - 48px));
+  .layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 0px;
-    border-radius: 14px;
-    overflow: hidden;
-    background: #090909;
-    border: 1px solid rgb(118 185 0 / 0.5);
-    box-shadow:
-      0 0 0 1px rgb(0 0 0 / 0.7),
-      0 0 26px rgb(118 185 0 / 0.22),
-      0 0 90px -20px rgb(118 185 0 / 0.3),
-      0 40px 90px -30px #000;
-    outline: none;
-    transition: grid-template-columns 0.38s cubic-bezier(0.2, 0.8, 0.2, 1);
-    animation: rise 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.05);
+    width: min(1680px, 100%);
+    height: min(960px, 100%);
+    transition: grid-template-columns 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.05);
   }
-  .panel.editing {
-    grid-template-columns: minmax(0, 1fr) 340px;
+  .layout.editing {
+    grid-template-columns: minmax(0, 1fr) 362px;
   }
-  .fullscreen .panel {
-    width: 100vw;
-    height: 100vh;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-  }
-  .panel.idle {
-    cursor: none;
+  .fullscreen .layout {
+    width: 100%;
+    height: 100%;
   }
   @keyframes rise {
     from {
       opacity: 0;
-      transform: translateY(14px) scale(0.98);
+      transform: translateY(16px) scale(0.985);
     }
   }
 
-  .main {
+  /* Floating cards. */
+  .card {
+    border-radius: 24px;
+    background: var(--float);
+    box-shadow: var(--float-shadow);
+  }
+  .player {
     display: flex;
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+    overflow: hidden;
+    outline: none;
+    transition: box-shadow 0.3s ease;
+  }
+  .player.idle {
+    cursor: none;
+  }
+  .fullscreen .player {
+    border-radius: 0;
+    box-shadow: none;
+    background: #000;
   }
 
   .side {
-    overflow: hidden;
     min-width: 0;
   }
-  .side-inner {
-    width: 340px;
+  .side-card {
+    width: 346px;
     height: 100%;
+    margin-left: 16px;
+    overflow: hidden;
     opacity: 0;
-    transform: translateX(40px);
+    transform: translateX(28px) scale(0.985);
     transition:
-      opacity 0.3s ease,
-      transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1);
+      opacity 0.32s ease,
+      transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
-  .editing .side-inner {
+  .editing .side-card {
     opacity: 1;
     transform: none;
   }
 
-  /* Trim mode: dim everything except the video and the film strip. */
+  /* Trim mode: everything but the video and the film strip steps back. */
   .dimmable {
     transition:
-      opacity 0.25s ease,
-      filter 0.25s ease;
+      opacity 0.3s ease,
+      filter 0.3s ease,
+      transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .trimming .dimmable {
-    opacity: 0.22;
-    filter: grayscale(0.7);
+    opacity: 0.25;
+    filter: grayscale(0.6) blur(0.5px);
     pointer-events: none;
   }
-  .spotlight {
-    transition: box-shadow 0.25s ease;
+  .trimming.editing .side-card {
+    opacity: 0.25;
   }
-  .trimming .stage {
-    box-shadow: inset 0 0 0 2px rgb(118 185 0 / 0.55);
-  }
-  .trimming .bar {
-    background: #0f130a;
+  .trimming .player {
     box-shadow:
-      inset 0 1px 0 rgb(118 185 0 / 0.6),
-      0 -10px 40px -10px rgb(118 185 0 / 0.35);
+      0 0 0 1px rgb(118 185 0 / 0.35),
+      0 30px 70px -24px rgb(0 0 0 / 0.95);
   }
 
   .nav {
     position: absolute;
     top: 50%;
-    width: 52px;
-    height: 52px;
-    margin-top: -26px;
+    width: 46px;
+    height: 46px;
+    margin-top: -23px;
     display: grid;
     place-items: center;
     border-radius: 50%;
     color: var(--text-dim);
-    background: rgb(255 255 255 / 0.05);
+    background: var(--glass);
     transition:
       color 0.15s ease,
-      background 0.15s ease,
-      box-shadow 0.15s ease;
+      background 0.15s ease;
   }
   .nav.prev {
-    left: 14px;
+    left: 20px;
   }
   .nav.next {
-    right: 14px;
+    right: 20px;
   }
   .nav:hover:not(:disabled) {
-    color: var(--accent);
-    background: var(--accent-soft);
-    box-shadow: 0 0 20px -4px rgb(118 185 0 / 0.6);
+    color: #fff;
+    background: var(--glass-2);
   }
   .nav:disabled {
     opacity: 0.2;
@@ -793,82 +799,95 @@
   .head {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 14px 12px 12px;
-    border-bottom: 1px solid #1a1a1a;
-    background: #0c0c0c;
+    gap: 10px;
+    padding: 14px 16px 12px 14px;
+  }
+  .fullscreen .head {
+    display: none;
   }
   .info {
     flex: 1;
     min-width: 0;
+    margin-left: 2px;
+  }
+  .title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .title span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .edited {
+    color: var(--accent);
+    display: grid;
   }
   .sub {
     display: flex;
     align-items: center;
-    gap: 7px;
-    margin-top: 2px;
-    font-size: 12.5px;
-    color: var(--text-dim);
+    gap: 6px;
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--text-faint);
     white-space: nowrap;
     overflow: hidden;
   }
-  .dot {
-    color: var(--text-faint);
-  }
   .position {
-    font-size: 12.5px;
+    margin-right: 4px;
+    font-size: 12px;
     color: var(--text-faint);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .round {
-    width: 36px;
-    height: 36px;
+  .icon-btn {
+    width: 34px;
+    height: 34px;
     flex-shrink: 0;
     display: grid;
     place-items: center;
-    border-radius: 50%;
-    color: var(--text);
-    background: rgb(255 255 255 / 0.06);
+    border-radius: 11px;
+    color: var(--text-dim);
+    background: var(--glass);
     transition:
-      background 0.12s ease,
-      color 0.12s ease;
+      background 0.15s ease,
+      color 0.15s ease;
   }
-  .round:hover {
-    background: rgb(255 255 255 / 0.12);
-    color: var(--accent);
+  .icon-btn:hover {
+    background: var(--glass-2);
+    color: var(--text);
   }
-  .round.starred {
+  .icon-btn.starred {
     color: var(--accent);
   }
   .edit-btn {
     display: flex;
     align-items: center;
     gap: 7px;
-    height: 36px;
-    padding: 0 16px;
-    border-radius: 18px;
-    background: var(--accent);
-    color: #000;
-    font-weight: 700;
+    height: 34px;
+    padding: 0 14px;
+    border-radius: 11px;
+    background: var(--glass-2);
+    color: var(--text);
     font-size: 13px;
-    box-shadow: 0 0 18px -4px rgb(118 185 0 / 0.75);
+    font-weight: 500;
     transition:
-      background 0.12s ease,
-      box-shadow 0.12s ease,
-      transform 0.1s ease;
+      background 0.15s ease,
+      color 0.15s ease;
+  }
+  .edit-btn :global(svg) {
+    color: var(--accent);
   }
   .edit-btn:hover {
-    background: var(--accent-hover);
-    box-shadow: 0 0 24px -2px rgb(118 185 0 / 0.85);
-  }
-  .edit-btn:active {
-    transform: scale(0.96);
+    background: var(--glass-3);
   }
   .edit-btn.active {
-    background: #142008;
+    background: rgb(118 185 0 / 0.12);
     color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
   }
 
   /* --- video ---------------------------------------------------------- */
@@ -876,7 +895,14 @@
     position: relative;
     flex: 1;
     min-height: 0;
+    margin: 0 12px;
+    border-radius: 16px;
+    overflow: hidden;
     background: #000;
+  }
+  .fullscreen .stage {
+    margin: 0;
+    border-radius: 0;
   }
   video {
     position: absolute;
@@ -889,9 +915,7 @@
 
   /* --- controls ------------------------------------------------------- */
   .bar {
-    padding: 10px 16px 10px;
-    background: #0c0c0c;
-    border-top: 1px solid #1a1a1a;
+    padding: 12px 18px 12px;
   }
   .row {
     display: flex;
@@ -900,50 +924,49 @@
     margin-top: 6px;
   }
   .trimming .row {
-    margin-top: 26px;
+    margin-top: 24px;
   }
   .group {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
   }
   .ctl {
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
     display: grid;
     place-items: center;
-    border-radius: 8px;
-    color: #fff;
+    border-radius: 10px;
+    color: var(--text-dim);
     transition:
-      background 0.12s ease,
-      color 0.12s ease;
+      background 0.15s ease,
+      color 0.15s ease;
   }
   .ctl:hover:not(:disabled) {
-    background: rgb(255 255 255 / 0.08);
-    color: var(--accent);
+    background: var(--glass-2);
+    color: var(--text);
   }
   .ctl:disabled {
     opacity: 0.3;
     cursor: default;
   }
   .ctl.play {
-    width: 42px;
-    height: 42px;
-    margin: 0 2px;
+    width: 40px;
+    height: 40px;
+    margin: 0 4px;
     border-radius: 50%;
     padding-left: 1px;
     background: var(--accent);
-    color: #000;
+    color: #050505;
   }
   .ctl.play:hover {
     background: var(--accent-hover);
-    color: #000;
+    color: #050505;
   }
   .ctl.small {
     width: 28px;
     height: 28px;
-    font-size: 17px;
-    font-weight: 600;
+    font-size: 16px;
   }
   .volume {
     display: flex;
@@ -964,34 +987,33 @@
   }
   .time {
     margin-left: 10px;
-    font-size: 13.5px;
+    font-size: 13px;
     font-variant-numeric: tabular-nums;
-    color: var(--text-dim);
+    color: var(--text-faint);
   }
   .time .current {
-    color: #fff;
-    font-weight: 600;
+    color: var(--text);
+    font-weight: 500;
   }
   .time .sep {
     margin: 0 4px;
-    color: var(--text-faint);
   }
   .speed {
     display: flex;
     align-items: center;
     gap: 2px;
     margin-right: 6px;
-    padding: 0 4px;
-    height: 34px;
-    border-radius: 17px;
-    background: rgb(255 255 255 / 0.06);
+    padding: 0 3px;
+    height: 32px;
+    border-radius: 16px;
+    background: var(--glass);
   }
   .rate {
-    min-width: 46px;
+    min-width: 42px;
     font-size: 12.5px;
-    font-weight: 700;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
-    color: #fff;
+    color: var(--text-dim);
   }
   .rate.changed {
     color: var(--accent);
@@ -1001,96 +1023,43 @@
   .trim-head {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 8px;
+    gap: 10px;
+    margin-bottom: 10px;
     animation: fade-in 0.2s ease;
   }
   .trim-title {
     display: flex;
     align-items: center;
     gap: 7px;
-    font-weight: 700;
-    font-size: 13.5px;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .trim-title :global(svg) {
     color: var(--accent);
   }
   .trim-hint {
     flex: 1;
     min-width: 0;
-    font-size: 12.5px;
-    color: var(--text-dim);
+    font-size: 12px;
+    color: var(--text-faint);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .keep {
-    font-size: 12.5px;
-    color: var(--text-dim);
+    margin-right: 4px;
+    font-size: 12px;
+    color: var(--text-faint);
     white-space: nowrap;
   }
   .keep b {
-    color: var(--accent);
-    font-variant-numeric: tabular-nums;
-  }
-  .ghost {
-    height: 32px;
-    padding: 0 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--text-dim);
-    border: 1px solid #2a2a2a;
-  }
-  .ghost:hover {
     color: var(--text);
-    border-color: #444;
-  }
-  .save {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 16px;
-    border-radius: 8px;
-    background: var(--accent);
-    color: #000;
-    font-weight: 700;
-    font-size: 13px;
-    box-shadow: 0 0 16px -4px rgb(118 185 0 / 0.8);
-  }
-  .trim-progress {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    width: 180px;
-    font-size: 12px;
-    color: var(--accent);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
-  .mini-track {
-    height: 5px;
-    border-radius: 5px;
-    background: rgb(255 255 255 / 0.1);
-    overflow: hidden;
-  }
-  .mini-track div {
-    height: 100%;
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-    transition: width 0.2s ease;
-  }
-  .trim-error {
-    max-width: 220px;
-    font-size: 12px;
-    color: #ff9b95;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .save:hover:not(:disabled) {
-    background: var(--accent-hover);
-  }
-  .save:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+  .done {
+    height: 34px;
+    padding: 0 16px;
   }
 
   /* --- overlays ------------------------------------------------------- */
@@ -1101,9 +1070,10 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 18px;
+    padding: 16px;
     border-radius: 50%;
-    background: rgb(0 0 0 / 0.6);
+    background: rgb(0 0 0 / 0.45);
+    backdrop-filter: blur(10px);
     color: #fff;
     pointer-events: none;
     transform: translate(-50%, -50%);
@@ -1111,9 +1081,9 @@
   }
   .osd.pill {
     border-radius: 999px;
-    padding: 10px 18px;
-    font-size: 17px;
-    font-weight: 700;
+    padding: 9px 16px;
+    font-size: 15px;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
   @keyframes osd {
@@ -1147,13 +1117,13 @@
   }
   .overlay-msg {
     flex-direction: row;
-    font-size: 14px;
+    font-size: 13.5px;
   }
   .spinner {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
-    border: 2px solid rgb(118 185 0 / 0.25);
+    border: 2px solid rgb(255 255 255 / 0.15);
     border-top-color: var(--accent);
     animation: spin 0.8s linear infinite;
   }
@@ -1163,38 +1133,31 @@
     }
   }
   .failure h2 {
-    font-size: 18px;
+    font-size: 16px;
+    font-weight: 600;
     color: var(--text);
   }
   .failure p {
     max-width: 440px;
-    font-size: 14px;
+    font-size: 13.5px;
     line-height: 1.5;
   }
   .failure code {
     font-size: 12px;
     color: var(--text-faint);
   }
-  .failure :global(svg) {
-    color: var(--accent);
-  }
   .help {
     position: absolute;
-    right: 16px;
-    bottom: 16px;
+    right: 14px;
+    bottom: 14px;
     width: 300px;
-    padding: 18px 20px;
-    border-radius: 12px;
-    background: rgb(18 18 18 / 0.96);
-    border: 1px solid var(--border);
-    box-shadow: 0 20px 50px -20px #000;
+    padding: 16px 18px;
+    border-radius: 16px;
   }
   .help h3 {
     margin-bottom: 12px;
     font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-weight: 500;
     color: var(--text-faint);
   }
   .help dl {
@@ -1202,21 +1165,20 @@
     grid-template-columns: auto 1fr;
     gap: 7px 14px;
     align-items: center;
-    font-size: 13px;
+    font-size: 12.5px;
   }
   .help dd {
     color: var(--text-dim);
   }
   kbd {
     display: inline-block;
-    min-width: 26px;
+    min-width: 24px;
     padding: 2px 7px;
-    border-radius: 5px;
-    background: var(--surface-3);
-    border-bottom: 2px solid #000;
+    border-radius: 6px;
+    background: var(--glass-2);
     font-family: inherit;
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 11.5px;
+    font-weight: 500;
     text-align: center;
     color: var(--text);
   }

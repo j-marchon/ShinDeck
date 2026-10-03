@@ -108,26 +108,29 @@
     aspect-ratio: 16 / 9;
     border-radius: var(--radius);
     overflow: hidden;
-    background: var(--surface-2);
-    transition: box-shadow 0.15s ease;
+    background: var(--glass);
+    transition:
+      box-shadow 0.2s ease,
+      transform 0.2s ease;
   }
-  /* Ring drawn inside the thumbnail so it is never clipped by neighbours. */
+  /* Hairline drawn inside the thumbnail so neighbours never clip it. */
   .thumb::after {
     content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.05);
     pointer-events: none;
-    transition: box-shadow 0.15s ease;
+    transition: box-shadow 0.2s ease;
   }
   .card:hover .thumb,
   .card:focus-visible .thumb {
-    box-shadow: 0 10px 28px -12px rgb(118 185 0 / 0.45);
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px -14px rgb(0 0 0 / 0.9);
   }
   .card:hover .thumb::after,
   .card:focus-visible .thumb::after {
-    box-shadow: inset 0 0 0 2px var(--accent);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22);
   }
 
   img {
@@ -138,14 +141,14 @@
     object-fit: cover;
     opacity: 0;
     transition:
-      opacity 0.2s ease,
-      transform 0.3s ease;
+      opacity 0.25s ease,
+      transform 0.4s ease;
   }
   img.visible {
     opacity: 1;
   }
   .card:hover img {
-    transform: scale(1.03);
+    transform: scale(1.025);
   }
 
   .placeholder {
@@ -153,7 +156,7 @@
     inset: 0;
     display: grid;
     place-items: center;
-    background: radial-gradient(circle at 50% 40%, var(--surface-3), var(--surface-2));
+    background: radial-gradient(circle at 50% 40%, var(--glass-2), transparent 70%);
     opacity: 0.8;
   }
 
@@ -162,21 +165,26 @@
     inset: 0;
     display: grid;
     place-items: center;
-    background: linear-gradient(to top, rgb(0 0 0 / 0.45), transparent 60%);
+    background: linear-gradient(to top, rgb(0 0 0 / 0.35), transparent 55%);
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity 0.2s ease;
   }
   .hover-play span {
-    width: 48px;
-    height: 48px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
     display: grid;
     place-items: center;
     padding-left: 3px;
-    background: var(--accent);
-    color: #000;
-    transform: scale(0.85);
-    transition: transform 0.15s ease;
+    background: rgb(0 0 0 / 0.35);
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+    color: #fff;
+    transform: scale(0.88);
+    transition:
+      transform 0.2s ease,
+      background 0.2s ease,
+      color 0.2s ease;
   }
   .card:hover .hover-play {
     opacity: 1;
@@ -184,28 +192,32 @@
   .card:hover .hover-play span {
     transform: scale(1);
   }
+  .hover-play span:hover {
+    color: var(--accent);
+  }
 
   .actions {
     position: absolute;
     top: 8px;
     right: 8px;
     display: flex;
-    gap: 6px;
+    gap: 5px;
   }
   .action {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     display: grid;
     place-items: center;
-    border-radius: 8px;
-    color: #fff;
-    background: rgb(0 0 0 / 0.6);
-    backdrop-filter: blur(6px);
+    border-radius: 9px;
+    color: rgb(255 255 255 / 0.9);
+    background: rgb(0 0 0 / 0.28);
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
     opacity: 0;
     transform: translateY(-2px);
     transition:
-      opacity 0.15s ease,
-      transform 0.15s ease,
+      opacity 0.18s ease,
+      transform 0.18s ease,
       color 0.15s ease,
       background 0.15s ease;
   }
@@ -216,37 +228,35 @@
     transform: none;
   }
   .action:hover {
-    color: var(--accent);
-    background: rgb(0 0 0 / 0.8);
+    color: #fff;
+    background: rgb(0 0 0 / 0.5);
   }
   .action:active {
-    transform: scale(0.88);
+    transform: scale(0.9);
   }
   .edit:hover {
-    color: #000;
-    background: var(--accent);
-    box-shadow: 0 0 12px rgb(118 185 0 / 0.6);
+    color: var(--accent);
   }
   .star.active {
     color: var(--accent);
-    filter: drop-shadow(0 0 6px rgb(118 185 0 / 0.6));
   }
 
   .duration {
     position: absolute;
     right: 8px;
     bottom: 8px;
-    padding: 2px 6px;
-    border-radius: 5px;
-    font-size: 12px;
-    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
-    background: rgb(0 0 0 / 0.72);
-    color: #fff;
+    background: rgb(0 0 0 / 0.42);
+    backdrop-filter: blur(8px);
+    color: rgb(255 255 255 / 0.92);
   }
 
   .meta {
-    padding: 8px 2px 0;
+    padding: 9px 2px 0;
     min-width: 0;
   }
   .sub {
@@ -254,11 +264,12 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    font-size: 12.5px;
-    color: var(--text-dim);
+    font-size: 12px;
+    color: var(--text-faint);
     min-width: 0;
   }
   .game {
+    color: var(--text-dim);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -266,7 +277,6 @@
   .facts {
     margin-left: auto;
     flex-shrink: 0;
-    color: var(--text-faint);
-    font-size: 12px;
+    font-variant-numeric: tabular-nums;
   }
 </style>

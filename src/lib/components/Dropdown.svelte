@@ -42,7 +42,7 @@
 <div class="dropdown" bind:this={root} {onkeydown}>
   {@render trigger({ open, toggle })}
   {#if open}
-    <div class="panel" class:right={align === "right"} style:width="{width}px">
+    <div class="panel glass-panel" class:right={align === "right"} style:width="{width}px">
       {@render children(close)}
     </div>
   {/if}
@@ -58,12 +58,7 @@
     left: 0;
     z-index: 30;
     padding: 6px;
-    border-radius: 10px;
-    background: #141414;
-    border: 1px solid #2c2c2c;
-    box-shadow:
-      0 16px 40px -12px rgb(0 0 0 / 0.9),
-      0 0 0 1px rgb(0 0 0 / 0.4);
+    border-radius: 14px;
     transform-origin: top left;
     animation: pop 0.14s cubic-bezier(0.2, 0.9, 0.3, 1.2);
   }

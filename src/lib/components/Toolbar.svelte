@@ -145,64 +145,60 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    min-height: 64px;
-    padding: 0 24px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg);
+    padding: 6px 22px 14px;
   }
   .filters,
   .right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
   }
   .right {
     flex-shrink: 0;
   }
-  .chip.pressed {
-    border-color: var(--accent);
-  }
   .chip.square {
-    width: 36px;
+    width: 34px;
     padding: 0;
     justify-content: center;
   }
-  .chip.square:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
   .badge {
-    min-width: 20px;
-    padding: 1px 6px;
-    border-radius: 10px;
-    background: var(--surface-3);
-    font-size: 11.5px;
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--glass-2);
+    font-size: 11px;
+    line-height: 18px;
     font-variant-numeric: tabular-nums;
     text-align: center;
   }
   .chip.on .badge {
-    background: rgb(118 185 0 / 0.2);
+    background: rgb(118 185 0 / 0.16);
   }
 
   .search {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 220px;
+    width: 230px;
     min-width: 120px;
     flex-shrink: 1;
-    height: 36px;
+    height: 34px;
     padding: 0 10px 0 12px;
-    border-radius: 9px;
-    background: var(--surface);
-    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--glass);
     color: var(--text-faint);
-    transition: border-color 0.12s ease;
+    transition:
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .search:hover {
+    background: var(--glass-2);
   }
   .search:focus-within,
   .search.on {
-    border-color: var(--accent);
+    background: var(--glass-2);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
     color: var(--text-dim);
   }
   .search input {
@@ -226,21 +222,21 @@
     color: var(--text);
   }
   .reset {
+    padding: 0 6px;
     font-size: 12.5px;
     color: var(--text-faint);
     white-space: nowrap;
-    text-decoration: underline;
-    text-underline-offset: 3px;
   }
   .reset:hover {
-    color: var(--accent);
+    color: var(--text);
   }
 
   .count {
-    margin-right: 6px;
-    font-size: 13px;
+    margin-right: 8px;
+    font-size: 12.5px;
     color: var(--text-faint);
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
   .spinning :global(svg) {
     animation: spin 0.8s linear infinite;

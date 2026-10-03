@@ -24,13 +24,13 @@
   .thumb {
     aspect-ratio: 16 / 9;
     border-radius: var(--radius);
-    background: var(--surface-2);
+    background: var(--glass);
   }
   .line {
     height: 12px;
     margin-top: 12px;
     border-radius: 4px;
-    background: var(--surface-2);
+    background: var(--glass);
   }
   .line.short {
     width: 55%;

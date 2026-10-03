@@ -215,8 +215,8 @@
   .tick {
     position: absolute;
     bottom: 0;
-    height: 6px;
-    border-left: 1px solid #555;
+    height: 5px;
+    border-left: 1px solid rgb(255 255 255 / 0.2);
   }
   .tick span {
     position: absolute;
@@ -230,7 +230,7 @@
   .film {
     position: relative;
     height: 78px;
-    border-radius: 6px;
+    border-radius: 10px;
     background: #050505;
     cursor: pointer;
     touch-action: none;
@@ -275,7 +275,7 @@
     bottom: 0;
     border-top: 3px solid var(--accent);
     border-bottom: 3px solid var(--accent);
-    box-shadow: 0 0 18px -2px rgb(118 185 0 / 0.55);
+    box-shadow: 0 0 14px -4px rgb(118 185 0 / 0.4);
     pointer-events: none;
   }
 

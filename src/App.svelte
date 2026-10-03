@@ -11,6 +11,7 @@
   import Toolbar from "./lib/components/Toolbar.svelte";
   import { library } from "./lib/state/library.svelte";
   import { settings } from "./lib/state/settings.svelte";
+  import { windowState } from "./lib/state/window.svelte";
 
   let showSettings = $state(false);
   let refreshing = $state(false);
@@ -23,6 +24,8 @@
   const resetKey = $derived(
     JSON.stringify([library.game, library.favoritesOnly, library.dateRange, library.sortKey, library.descending, library.query]),
   );
+
+  onMount(() => windowState.track());
 
   onMount(() => {
     let unlisten: (() => void) | undefined;
@@ -57,7 +60,7 @@
   }
 </script>
 
-<div class="app">
+<div class="app" class:square={windowState.maximized || windowState.fullscreen}>
   <TitleBar />
 
   {#if screen === "setup"}
@@ -106,10 +109,33 @@
 </div>
 
 <style>
+  /* The window itself is transparent; this is its visible frame. */
   .app {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
+    overflow: hidden;
+    border-radius: 14px;
+    background: var(--bg);
+    /* Makes overlays (player, dialogs) position against and clip to the
+       rounded frame instead of the square window. */
+    contain: layout paint;
+  }
+  .app::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+    pointer-events: none;
+  }
+  .app.square {
+    border-radius: 0;
+  }
+  .app.square::after {
+    display: none;
   }
   .body {
     flex: 1;

@@ -21,8 +21,8 @@
   </label>
 
   <div class="actions">
-    <button class="secondary" onclick={() => editor.answer(null, false)}>Cancel</button>
-    <button class="primary" onclick={() => editor.answer(choice, remember)}>Save</button>
+    <button class="btn-ghost" onclick={() => editor.answer(null, false)}>Cancel</button>
+    <button class="btn-primary" onclick={() => editor.answer(choice, remember)}>Save</button>
   </div>
 </Modal>
 
@@ -57,26 +57,5 @@
     gap: 10px;
     margin-top: 22px;
   }
-  .primary,
-  .secondary {
-    height: 38px;
-    padding: 0 22px;
-    border-radius: 9px;
-    font-weight: 700;
-    font-size: 13.5px;
-  }
-  .primary {
-    background: var(--accent);
-    color: #000;
-  }
-  .primary:hover {
-    background: var(--accent-hover);
-  }
-  .secondary {
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-  }
-  .secondary:hover {
-    color: var(--text);
-  }
+
 </style>

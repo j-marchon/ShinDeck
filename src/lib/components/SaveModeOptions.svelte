@@ -39,40 +39,36 @@
   .options {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
   .option {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 14px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: var(--surface);
+    padding: 11px 14px;
+    border-radius: 12px;
+    background: var(--glass);
     text-align: left;
-    transition:
-      border-color 0.12s ease,
-      background 0.12s ease;
+    transition: background 0.15s ease;
   }
   .option:hover {
-    border-color: #3a3a3a;
+    background: var(--glass-2);
   }
   .option.selected {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    background: var(--glass-2);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
   }
   .icon {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     display: grid;
     place-items: center;
-    border-radius: 9px;
-    background: var(--surface-3);
+    border-radius: 10px;
+    background: var(--glass);
     color: var(--text-dim);
   }
   .selected .icon {
-    background: var(--accent);
-    color: #000;
+    color: var(--accent);
   }
   .text {
     flex: 1;
@@ -82,6 +78,7 @@
   }
   b {
     font-size: 13.5px;
+    font-weight: 500;
     color: var(--text);
   }
   small {
@@ -92,10 +89,10 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 2px solid #444;
+    box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.25);
   }
   .selected .dot {
-    border-color: var(--accent);
-    background: radial-gradient(circle, var(--accent) 45%, transparent 50%);
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+    background: radial-gradient(circle, var(--accent) 38%, transparent 42%);
   }
 </style>

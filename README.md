@@ -3,7 +3,9 @@
 A fast, lightweight clip manager and editor for **NVIDIA ShadowPlay** recordings on Windows.
 Black and NVIDIA green, a gallery organized by game, a keyboard-driven player and a built-in editor.
 
-- **Custom window.** ShinDeck draws its own title bar. Minimize and maximize glow green, close turns red, and the thin window border is tinted to match.
+- **Seamless window.** ShinDeck draws its own small title bar, blended into the app with no dividing lines.
+  - The window itself is transparent, so the app draws its own rounded frame instead of the Windows one, and Windows' colored outline is turned off.
+  - Minimize and maximize glow green on hover; close turns red.
 - **First-launch setup.** Pick your clips folder. ShinDeck pre-fills the folder ShadowPlay actually uses.
 - **Organized by game.** ShadowPlay creates one folder per game, and ShinDeck uses that folder as the clip's game.
 - **Gallery.**
@@ -18,16 +20,18 @@ Black and NVIDIA green, a gallery organized by game, a keyboard-driven player an
 - **Inline rename.** Click a clip's title and type a new name. The file is renamed on disk, and favorites and edit marks follow it.
 - **Favorites and edit shortcut.** Hover a thumbnail for the star and the pencil. The pencil opens the clip with the editor ready.
 - **Player.**
-  - Opens in a large panel over the dimmed gallery, with a green glow.
+  - Opens as a large floating card over the dimmed, blurred gallery.
   - Controls: time counter, seek bar, play/pause, previous/next clip, slower/faster, volume and fullscreen.
-- **Editor.** The highlighted **Edit** button slides in a side panel with:
+- **Editor.** The **Edit** button slides in a separate floating card.
+  Every change stays pending, and is listed above the **Save** button, until you press **Save** (or `Ctrl+S`). **Discard** drops them. The card has:
   - **Rename.**
   - **Trim & Cut.** The seek bar turns into a film strip:
     - Drag the green handles to trim the start and end.
     - Right-click twice to mark a section to cut out. You can cut as many sections as you like.
     - Everything except the video and the film strip dims while you work.
     - Playback previews the result, skipping the cut parts.
-  - **Compress** to fit Discord (10 MB), WhatsApp (16 MB), Instagram (50 MB) or any custom size.
+    - **Done** adds the trim to the pending changes.
+  - **Compress:** pick one of four checkbox tiles (Discord 10 MB, WhatsApp 16 MB, Instagram 50 MB, or a custom size), then press **Compress** to add it. Trim and compression run together in one export.
   - **Save choice.** The first edit asks whether to save a **new clip** or **replace the original**. You can remember the choice or be asked every time, and change it later in Settings or at the bottom of the edit panel.
 - **Live updates.** New clips appear as soon as ShadowPlay saves them.
 
@@ -45,7 +49,8 @@ Black and NVIDIA green, a gallery organized by game, a keyboard-driven player an
 | `F`           | Fullscreen                |
 | `S`           | Toggle favorite           |
 | `E`           | Open/close the edit panel |
-| `Enter`       | Save the trim (trim mode) |
+| `Enter`       | Done (trim mode)          |
+| `Ctrl` + `S`  | Save pending edits        |
 | `Esc`         | Leave trim mode / back to the gallery |
 | `?`           | Show shortcuts            |
 
@@ -57,7 +62,7 @@ In the gallery, `Ctrl+F` or `/` focuses search.
 | ----------- | ---------------------------------------------------------------------- |
 | Shell       | **Tauri 2**. Uses the WebView2 runtime that ships with Windows, so the app itself is a few MB (an Electron app would be 100 MB or more) and memory use stays low. The installer is about 24 MB, almost all of it the bundled ffmpeg used by the editor. |
 | Backend     | **Rust**. Scans the folders in parallel, extracts thumbnails and icons through Win32, and watches the clips folder. |
-| UI          | **Svelte 5**. Compiles to plain DOM updates with no virtual DOM; the whole UI is about 50 KB gzipped. |
+| UI          | **Svelte 5**. Compiles to plain DOM updates with no virtual DOM; the whole UI is about 50 KB gzipped. The Inter font is bundled locally (nothing loads from a CDN). |
 | Video       | WebView2's native `<video>` (hardware-decoded H.264/HEVC/AV1), streamed via Tauri's asset protocol with HTTP range requests, so seeking never reads the whole file. |
 | Installer   | **NSIS** via the Tauri bundler: per-user install with no admin prompt, Start-menu entry, uninstaller, and the WebView2 bootstrapper embedded in case the runtime is missing. |
 
@@ -186,7 +191,7 @@ The first `npm run tauri dev` or `npm run tauri build` for Windows downloads ffm
 
 ```sh
 npm run tauri build
-# -> src-tauri/target/release/bundle/nsis/ShinDeck_0.2.0_x64-setup.exe
+# -> src-tauri/target/release/bundle/nsis/ShinDeck_0.3.0_x64-setup.exe
 ```
 
 The `Windows build` GitHub Actions workflow builds the installer on every push.

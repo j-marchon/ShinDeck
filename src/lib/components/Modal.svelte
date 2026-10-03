@@ -23,7 +23,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="backdrop" onclick={onclose}>
   <div
-    class="dialog"
+    class="dialog glass-panel"
     role="dialog"
     aria-modal="true"
     aria-label={title}
@@ -47,8 +47,8 @@
     display: grid;
     place-items: center;
     padding: 24px;
-    background: rgb(0 0 0 / 0.72);
-    backdrop-filter: blur(4px);
+    background: rgb(0 0 0 / 0.6);
+    backdrop-filter: blur(6px);
     animation: fade 0.15s ease;
   }
   .dialog {
@@ -56,12 +56,7 @@
     max-height: 100%;
     overflow-y: auto;
     padding: 22px 24px 24px;
-    border-radius: 14px;
-    background: var(--bg-elev);
-    border: 1px solid rgb(118 185 0 / 0.35);
-    box-shadow:
-      0 0 40px -10px rgb(118 185 0 / 0.35),
-      0 30px 60px -20px #000;
+    border-radius: 20px;
     animation: rise 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.1);
   }
   header {
@@ -71,8 +66,8 @@
     margin-bottom: 18px;
   }
   h2 {
-    font-size: 17px;
-    font-weight: 700;
+    font-size: 16px;
+    font-weight: 600;
   }
   .x {
     width: 30px;
@@ -83,7 +78,7 @@
     color: var(--text-dim);
   }
   .x:hover {
-    background: var(--surface-3);
+    background: var(--glass-2);
     color: var(--text);
   }
   @keyframes fade {

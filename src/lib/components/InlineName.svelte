@@ -103,30 +103,25 @@
   }
   .title,
   input {
-    width: 100%;
+    width: calc(100% + 6px);
     height: 24px;
     padding: 0 6px;
     margin-left: -6px;
-    border-radius: 6px;
+    border-radius: 7px;
     font-size: 13.5px;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text);
   }
   .title {
     display: flex;
     align-items: center;
     gap: 6px;
-    width: calc(100% + 6px);
-    border: 1px solid transparent;
     text-align: left;
     cursor: text;
-    transition:
-      background 0.12s ease,
-      border-color 0.12s ease;
+    transition: background 0.15s ease;
   }
   .title:hover {
-    background: var(--surface-2);
-    border-color: #2f2f2f;
+    background: var(--glass-2);
   }
   .text {
     flex: 1;
@@ -143,21 +138,19 @@
   .hint {
     color: var(--text-faint);
     opacity: 0;
-    transition: opacity 0.12s ease;
+    transition: opacity 0.15s ease;
   }
   .title:hover .hint {
     opacity: 1;
   }
   input {
-    width: calc(100% + 6px);
-    background: var(--surface);
-    border: 1px solid var(--accent);
+    background: var(--glass-2);
+    border: none;
     outline: none;
-    box-shadow: 0 0 0 3px rgb(118 185 0 / 0.15);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
   }
   .invalid input {
-    border-color: var(--danger);
-    box-shadow: 0 0 0 3px rgb(255 95 87 / 0.15);
+    box-shadow: inset 0 0 0 1px var(--danger);
     animation: shake 0.3s;
   }
   .error {
@@ -165,10 +158,10 @@
     top: calc(100% + 4px);
     left: -6px;
     z-index: 5;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: #2a1212;
-    border: 1px solid rgb(255 95 87 / 0.5);
+    padding: 5px 9px;
+    border-radius: 8px;
+    background: rgb(40 14 14 / 0.9);
+    backdrop-filter: blur(10px);
     color: #ffb4b0;
     font-size: 12px;
     white-space: nowrap;

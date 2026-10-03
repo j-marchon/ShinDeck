@@ -19,7 +19,7 @@
   <div class="badge"><Icon name={icon} size={26} /></div>
   <h2>{title}</h2>
   {#if children}<p>{@render children()}</p>{/if}
-  {#if action}<button onclick={action.run}>{action.label}</button>{/if}
+  {#if action}<button class="btn-ghost" onclick={action.run}>{action.label}</button>{/if}
 </div>
 
 <style>
@@ -39,13 +39,13 @@
     margin-bottom: 6px;
     display: grid;
     place-items: center;
-    border-radius: 18px;
-    background: var(--accent-soft);
-    color: var(--accent);
+    border-radius: 20px;
+    background: var(--glass);
+    color: var(--text-dim);
   }
   h2 {
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 16px;
+    font-weight: 600;
   }
   p {
     max-width: 420px;
@@ -62,11 +62,5 @@
   }
   button {
     margin-top: 10px;
-    height: 38px;
-    padding: 0 20px;
-    border-radius: 8px;
-    background: var(--accent);
-    color: #000;
-    font-weight: 700;
   }
 </style>

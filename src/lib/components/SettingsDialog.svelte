@@ -49,11 +49,9 @@
     margin-top: 22px;
   }
   h3 {
-    margin-bottom: 10px;
-    font-size: 11.5px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    margin-bottom: 9px;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--text-faint);
   }
   .folder {
@@ -62,10 +60,9 @@
     gap: 10px;
     height: 44px;
     padding: 0 6px 0 14px;
-    border-radius: 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--accent);
+    border-radius: 12px;
+    background: var(--glass);
+    color: var(--text-faint);
   }
   .path {
     flex: 1;
@@ -81,15 +78,14 @@
   .btn {
     height: 32px;
     padding: 0 14px;
-    border-radius: 7px;
-    background: var(--surface-3);
+    border-radius: 9px;
+    background: var(--glass-2);
     color: var(--text);
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
   }
   .btn:hover {
-    background: var(--accent);
-    color: #000;
+    background: var(--glass-3);
   }
   .error {
     margin-top: 8px;

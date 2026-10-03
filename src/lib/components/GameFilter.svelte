@@ -49,7 +49,7 @@
 <Dropdown bind:open width={300}>
   {#snippet trigger({ open, toggle })}
     <div class="trigger">
-      <button class="chip" class:on={selected === null} class:pressed={open} onclick={toggle} aria-haspopup="menu">
+      <button class="chip" class:on={selected === null} class:pressed={open && selected !== null} onclick={toggle} aria-haspopup="menu">
         {#if selected}
           <GameIcon game={selected.id} name={selected.name} size={18} />
           <span class="name">{selected.name}</span>
@@ -121,31 +121,28 @@
   .chip {
     max-width: 240px;
   }
-  .chip.pressed {
-    border-color: var(--accent);
-  }
   .name {
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--text);
   }
   .clear {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     margin-left: -30px;
-    margin-right: 8px;
+    margin-right: 10px;
     display: grid;
     place-items: center;
     border-radius: 50%;
     color: var(--text-dim);
-    background: var(--surface-3);
+    background: var(--glass-2);
   }
   .trigger:has(.clear) .chip {
-    padding-right: 36px;
+    padding-right: 38px;
   }
   .clear:hover {
     color: #fff;
-    background: #444;
+    background: var(--glass-3);
   }
 
   .search {
@@ -155,13 +152,12 @@
     height: 34px;
     margin-bottom: 6px;
     padding: 0 10px;
-    border-radius: 7px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--glass);
     color: var(--text-faint);
   }
   .search:focus-within {
-    border-color: var(--accent);
+    background: var(--glass-2);
   }
   .search input {
     flex: 1;
@@ -178,10 +174,10 @@
     place-items: center;
   }
   .all {
-    font-weight: 600;
+    font-weight: 500;
   }
   .all.active {
-    box-shadow: inset 0 0 0 1px rgb(118 185 0 / 0.4);
+    color: var(--accent);
   }
   .list {
     max-height: min(420px, 55vh);

@@ -137,7 +137,6 @@
     place-items: center;
     padding: 32px;
     overflow: hidden;
-    background: var(--bg);
   }
   .glow {
     position: absolute;
@@ -146,7 +145,7 @@
     top: -520px;
     left: 50%;
     transform: translateX(-50%);
-    background: radial-gradient(circle, rgb(118 185 0 / 0.16), transparent 62%);
+    background: radial-gradient(circle, rgb(118 185 0 / 0.07), transparent 62%);
     pointer-events: none;
   }
 
@@ -154,20 +153,9 @@
     position: relative;
     width: min(600px, 100%);
     padding: 40px 44px 36px;
-    border-radius: 16px;
-    background: var(--bg-elev);
-    border: 1px solid var(--border);
-    box-shadow: 0 30px 80px -30px rgb(0 0 0 / 0.8);
-  }
-  .panel::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 44px;
-    right: 44px;
-    height: 2px;
-    background: var(--accent);
-    border-radius: 0 0 2px 2px;
+    border-radius: 24px;
+    background: var(--float);
+    box-shadow: var(--float-shadow);
   }
 
   .hero {
@@ -179,9 +167,9 @@
     margin-bottom: 32px;
   }
   h1 {
-    font-size: 26px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
   .hero p {
     max-width: 460px;
@@ -194,26 +182,23 @@
     display: block;
     margin-bottom: 8px;
     font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-weight: 500;
     color: var(--text-faint);
   }
   .field {
     display: flex;
     align-items: center;
     height: 46px;
-    border-radius: 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    transition: border-color 0.12s ease;
+    border-radius: 12px;
+    background: var(--glass);
+    transition: background 0.15s ease;
   }
   .field:focus-within {
-    border-color: var(--accent);
+    background: var(--glass-2);
   }
   .field-icon {
     padding: 0 10px 0 14px;
-    color: var(--accent);
+    color: var(--text-faint);
   }
   .field input {
     flex: 1;
@@ -229,14 +214,14 @@
     height: 34px;
     margin-right: 6px;
     padding: 0 14px;
-    border-radius: 7px;
-    background: var(--surface-3);
+    border-radius: 9px;
+    background: var(--glass-2);
     color: var(--text);
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
   }
   .browse:hover {
-    background: #333;
+    background: var(--glass-3);
   }
 
   .status {
@@ -289,11 +274,11 @@
   }
   .primary,
   .secondary {
-    height: 42px;
-    padding: 0 26px;
-    border-radius: 9px;
-    font-size: 14px;
-    font-weight: 700;
+    height: 40px;
+    padding: 0 24px;
+    border-radius: 11px;
+    font-size: 13.5px;
+    font-weight: 600;
   }
   .primary {
     background: var(--accent);
@@ -311,10 +296,10 @@
   }
   .secondary {
     color: var(--text-dim);
-    border: 1px solid var(--border);
+    background: var(--glass);
   }
   .secondary:hover {
     color: var(--text);
-    border-color: #444;
+    background: var(--glass-2);
   }
 </style>

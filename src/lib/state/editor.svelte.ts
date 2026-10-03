@@ -47,7 +47,7 @@ class EditorState {
     const unlisten = await api.onExportProgress((p) => (this.progress = p));
     try {
       const result = await api.exportClip(clip.id, spec, destination);
-      this.#notify(destination === "new" ? "Saved as a new clip" : "Clip updated");
+      this.notify(destination === "new" ? "Saved as a new clip" : "Clip updated");
       return result;
     } catch (e) {
       const message = String(e).replace(/^Error: /, "");
@@ -63,7 +63,7 @@ class EditorState {
     api.cancelExport();
   }
 
-  #notify(message: string) {
+  notify(message: string) {
     clearTimeout(this.#noticeTimer);
     this.notice = message;
     this.#noticeTimer = setTimeout(() => (this.notice = null), 2600);
