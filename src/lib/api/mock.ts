@@ -38,7 +38,7 @@ let root = "C:\\Videos";
 const favorites = new Set<string>();
 const edited = new Set<string>();
 let clips: Clip[] = [];
-let settings: Settings = { libraryPath: null, setupComplete: false, saveMode: null, editingAvailable: true };
+let settings: Settings = { libraryPath: null, setupComplete: false, saveMode: null, confirmDelete: true, editingAvailable: true };
 const progressHandlers = new Set<(p: number) => void>();
 let cancelled = false;
 
@@ -173,6 +173,17 @@ export const mockBackend: Backend = {
   async setSaveMode(mode) {
     settings = { ...settings, saveMode: mode };
     return settings;
+  },
+  async setConfirmDelete(confirm) {
+    settings = { ...settings, confirmDelete: confirm };
+    return settings;
+  },
+  async deleteClip(id) {
+    await delay(120);
+    find(id);
+    favorites.delete(id);
+    edited.delete(id);
+    clips = clips.filter((c) => c.id !== id);
   },
   async pickFolder() {
     return "D:\\Captures\\ShadowPlay";

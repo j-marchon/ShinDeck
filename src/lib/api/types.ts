@@ -9,6 +9,8 @@ export interface Settings {
   setupComplete: boolean;
   /** null until the user picks one (they're prompted on their first edit). */
   saveMode: SaveMode | null;
+  /** Ask before moving a clip to the Recycle Bin. */
+  confirmDelete: boolean;
   /** False when the bundled ffmpeg is missing. */
   editingAvailable: boolean;
 }
@@ -75,6 +77,9 @@ export interface Backend {
   cancelExport(): Promise<void>;
   onExportProgress(handler: (progress: number) => void): Promise<() => void>;
   setSaveMode(mode: SaveMode): Promise<Settings>;
+  setConfirmDelete(confirm: boolean): Promise<Settings>;
+  /** Moves the clip file to the Recycle Bin. */
+  deleteClip(id: string): Promise<void>;
   pickFolder(defaultPath?: string): Promise<string | null>;
   onLibraryChanged(handler: () => void): Promise<() => void>;
   toggleFullscreen(): Promise<boolean>;

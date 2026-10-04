@@ -51,6 +51,8 @@ pub fn run() {
             commands::set_favorite,
             commands::reveal_clip,
             commands::set_save_mode,
+            commands::set_confirm_delete,
+            commands::delete_clip,
             commands::rename_clip,
             commands::export_clip,
             commands::cancel_export,

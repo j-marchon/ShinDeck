@@ -19,6 +19,8 @@ export const tauriBackend: Backend = {
   cancelExport: () => invoke("cancel_export"),
   onExportProgress: (handler) => listen<number>("export-progress", (e) => handler(e.payload)),
   setSaveMode: (mode) => invoke<Settings>("set_save_mode", { mode }),
+  setConfirmDelete: (confirm) => invoke<Settings>("set_confirm_delete", { confirm }),
+  deleteClip: (id) => invoke("delete_clip", { id }),
 
   async pickFolder(defaultPath) {
     const picked = await open({ directory: true, defaultPath, title: "Choose your ShadowPlay clips folder" });

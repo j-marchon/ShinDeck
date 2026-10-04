@@ -34,4 +34,21 @@ pub fn reveal_in_file_manager(path: &Path) -> std::io::Result<()> {
     std::process::Command::new(program).arg(dir).spawn().map(|_| ())
 }
 
+/// Development fallback: uses the desktop trash where a command exists.
+pub fn move_to_trash(path: &Path) -> std::io::Result<()> {
+    let status = if cfg!(target_os = "macos") {
+        std::process::Command::new("osascript")
+            .args(["-e", "on run argv\ntell application \"Finder\" to delete (POSIX file (item 1 of argv))\nend run"])
+            .arg(path)
+            .status()?
+    } else {
+        std::process::Command::new("gio").arg("trash").arg(path).status()?
+    };
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other("The clip could not be moved to the trash"))
+    }
+}
+
 pub fn style_window(_window: &tauri::WebviewWindow) {}

@@ -165,6 +165,31 @@ pub fn rename(state: &AppState, id: &str, name: &str) -> Result<Clip> {
     commit(state, &root, id, &target, false)
 }
 
+/// Moves a clip to the Recycle Bin and drops its favorite/edited marks and
+/// index entry. A clip that is already gone counts as removed.
+pub fn delete(state: &AppState, id: &str) -> Result<()> {
+    let path = clip_path(state, id)?;
+    if path.exists() {
+        crate::platform::move_to_trash(&path).map_err(|e| match e.kind() {
+            std::io::ErrorKind::PermissionDenied => {
+                Error::Message("The file is in use by another program".into())
+            }
+            _ => Error::from(e),
+        })?;
+    }
+
+    let mut favorites = state.favorites.lock().unwrap();
+    if favorites.value.set(id, false) {
+        favorites.save()?;
+    }
+    let mut marks = state.edited.lock().unwrap();
+    if marks.value.set(id, false) {
+        marks.save()?;
+    }
+    state.index.write().unwrap().remove(id);
+    Ok(())
+}
+
 pub fn export(
     state: &AppState,
     id: &str,

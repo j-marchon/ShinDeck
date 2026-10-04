@@ -17,6 +17,8 @@ pub struct SettingsView {
     library_path: Option<PathBuf>,
     setup_complete: bool,
     save_mode: Option<SaveMode>,
+    /// Whether removing a clip asks for confirmation first.
+    confirm_delete: bool,
     /// Whether the editor can run (ffmpeg found).
     editing_available: bool,
 }
@@ -28,6 +30,7 @@ pub fn get_settings(state: State<'_, AppState>) -> SettingsView {
         library_path: settings.library_path.clone(),
         setup_complete: settings.setup_complete(),
         save_mode: settings.save_mode,
+        confirm_delete: !settings.skip_delete_confirm,
         editing_available: editor::ffmpeg::path().is_some(),
     }
 }
@@ -128,6 +131,24 @@ pub fn set_save_mode(state: State<'_, AppState>, mode: SaveMode) -> Result<Setti
         settings.save()?;
     }
     Ok(get_settings(state))
+}
+
+#[tauri::command]
+pub fn set_confirm_delete(state: State<'_, AppState>, confirm: bool) -> Result<SettingsView> {
+    {
+        let mut settings = state.settings.lock().unwrap();
+        settings.value.skip_delete_confirm = !confirm;
+        settings.save()?;
+    }
+    Ok(get_settings(state))
+}
+
+/// Moves a clip to the Recycle Bin and forgets everything ShinDeck knew about it.
+#[tauri::command]
+pub async fn delete_clip(app: AppHandle, id: String) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || editor::delete(&app.state::<AppState>(), &id))
+        .await
+        .map_err(|e| Error::Message(e.to_string()))?
 }
 
 #[tauri::command]

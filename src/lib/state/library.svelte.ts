@@ -152,6 +152,21 @@ class LibraryState {
     return clip;
   }
 
+  /** Moves the clip to the Recycle Bin and drops it from the library. Throws a readable message on failure. */
+  async remove(id: string) {
+    await api.deleteClip(id);
+    const clip = this.clips.find((c) => c.id === id);
+    this.#setClips(this.clips.filter((c) => c.id !== id));
+    if (clip) {
+      this.games = this.games.flatMap((g) => {
+        if (g.id !== clip.game) return [g];
+        // A game with no clips left disappears, like it does after a rescan.
+        return g.clipCount > 1 ? [{ ...g, clipCount: g.clipCount - 1 }] : [];
+      });
+      if (this.game !== null && !this.gameById.has(this.game)) this.game = null;
+    }
+  }
+
   /**
    * Adds or updates a clip returned by the backend (rename, export). Pass
    * `previousId` when the clip's id changed.

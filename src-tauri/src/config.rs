@@ -32,6 +32,9 @@ pub struct Settings {
     pub library_path: Option<PathBuf>,
     /// `None` until the user has made a choice the first time they edit.
     pub save_mode: Option<SaveMode>,
+    /// Set when the user opted out of the "move to Recycle Bin?" prompt.
+    /// Stored inverted so a missing key (older settings files) keeps asking.
+    pub skip_delete_confirm: bool,
 }
 
 impl Settings {

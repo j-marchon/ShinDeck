@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, type Clip } from "../api";
+  import { deletion } from "../state/deletion.svelte";
   import { library } from "../state/library.svelte";
   import { formatDuration, formatRelativeDate, formatSize } from "../util/format";
   import GameIcon from "./GameIcon.svelte";
@@ -36,6 +37,11 @@
   function toggleFavorite(e: MouseEvent) {
     e.stopPropagation();
     library.toggleFavorite(clip.id);
+  }
+
+  function remove(e: MouseEvent) {
+    e.stopPropagation();
+    deletion.request(clip);
   }
 
   function edit(e: MouseEvent) {
@@ -81,6 +87,10 @@
         <Icon name="star" size={17} filled={favorite} />
       </button>
     </div>
+
+    <button class="action remove" title="Move to Recycle Bin" aria-label="Remove clip" onclick={remove}>
+      <Icon name="trash" size={15} />
+    </button>
 
     {#if clip.durationMs}
       <span class="duration">{formatDuration(clip.durationMs)}</span>
@@ -242,6 +252,15 @@
   }
   .star.active {
     color: var(--accent);
+  }
+  .remove {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    transform: translateY(2px);
+  }
+  .remove:hover {
+    color: var(--danger);
   }
 
   .edited-tag {

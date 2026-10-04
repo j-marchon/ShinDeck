@@ -13,6 +13,10 @@ class SettingsState {
     this.value = await api.setSaveMode(mode);
   }
 
+  async setConfirmDelete(confirm: boolean) {
+    this.value = await api.setConfirmDelete(confirm);
+  }
+
   /** Where edits go without asking, or null when the user must be asked. */
   get defaultDestination(): Destination | null {
     const mode = this.value?.saveMode;

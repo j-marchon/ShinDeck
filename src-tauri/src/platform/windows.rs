@@ -132,6 +132,40 @@ pub fn reveal_in_file_manager(path: &Path) -> std::io::Result<()> {
         .map(|_| ())
 }
 
+/// Sends a file to the Recycle Bin (never deletes it permanently).
+///
+/// `FOF_WANTNUKEWARNING` keeps Windows' own warning for the one case where it
+/// cannot recycle a file (for example one larger than the bin allows), so a
+/// clip is never destroyed without the user being told.
+pub fn move_to_trash(path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::{
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT,
+        FOF_WANTNUKEWARNING, FO_DELETE, SHFILEOPSTRUCTW,
+    };
+
+    // SHFileOperation wants a double-null-terminated list of paths.
+    let mut from: Vec<u16> = path.as_os_str().encode_wide().collect();
+    from.extend([0, 0]);
+
+    let mut op = SHFILEOPSTRUCTW {
+        wFunc: FO_DELETE,
+        pFrom: PCWSTR(from.as_ptr()),
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT | FOF_WANTNUKEWARNING).0
+            as u16,
+        ..Default::default()
+    };
+    let code = unsafe { SHFileOperationW(&mut op) };
+    if code != 0 {
+        return Err(std::io::Error::other(format!("Windows could not move the file to the Recycle Bin (error {code:#x})")));
+    }
+    if op.fAnyOperationsAborted.as_bool() {
+        return Err(std::io::Error::other("The clip was not moved to the Recycle Bin"));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Images
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@
   import { library } from "../state/library.svelte";
   import { settings } from "../state/settings.svelte";
   import Icon from "./Icon.svelte";
+  import DeleteConfirmOptions from "./DeleteConfirmOptions.svelte";
   import Modal from "./Modal.svelte";
   import SaveModeOptions from "./SaveModeOptions.svelte";
 
@@ -37,6 +38,14 @@
   <section>
     <h3>When saving an edit</h3>
     <SaveModeOptions value={settings.value?.saveMode ?? "ask"} onchange={(mode) => settings.setSaveMode(mode)} />
+  </section>
+
+  <section>
+    <h3>When removing a clip</h3>
+    <DeleteConfirmOptions
+      value={settings.value?.confirmDelete ?? true}
+      onchange={(confirm) => settings.setConfirmDelete(confirm)}
+    />
   </section>
 
   {#if settings.value && !settings.value.editingAvailable}

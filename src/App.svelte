@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type Clip } from "./lib/api";
+  import DeleteDialog from "./lib/components/DeleteDialog.svelte";
   import EmptyState from "./lib/components/EmptyState.svelte";
   import Gallery from "./lib/components/Gallery.svelte";
   import PlayerModal from "./lib/components/player/PlayerModal.svelte";
@@ -9,6 +10,7 @@
   import Skeleton from "./lib/components/Skeleton.svelte";
   import TitleBar from "./lib/components/TitleBar.svelte";
   import Toolbar from "./lib/components/Toolbar.svelte";
+  import { deletion } from "./lib/state/deletion.svelte";
   import { library } from "./lib/state/library.svelte";
   import { settings } from "./lib/state/settings.svelte";
   import { windowState } from "./lib/state/window.svelte";
@@ -66,7 +68,7 @@
   {#if screen === "setup"}
     <div class="body"><Setup oncomplete={onSetupComplete} /></div>
   {:else if screen === "library"}
-    <main class="body" inert={player !== null || showSettings}>
+    <main class="body" inert={player !== null || showSettings || deletion.pending !== null}>
       <Toolbar onrefresh={refresh} onsettings={() => (showSettings = true)} {refreshing} shortcuts={player === null} />
       <div class="content">
         {#if library.status === "loading" || library.status === "idle"}
@@ -105,6 +107,7 @@
     {#if showSettings}
       <SettingsDialog onclose={() => (showSettings = false)} />
     {/if}
+    <DeleteDialog />
   {/if}
 </div>
 
