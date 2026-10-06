@@ -1,13 +1,12 @@
 # ShinDeck
 
 A fast, lightweight clip manager and editor for **NVIDIA ShadowPlay** recordings on Windows.
-Black and NVIDIA green, a gallery organized by game, a keyboard-driven player and a built-in editor.
-
-##Build
+ a customizable gallery, a keyboard-driven player and a built-in editor/compressor.
 
 To build an installer:
-git clone https://github.com/j-marchon/ShinDeck.git
 ```
+git clone https://github.com/j-marchon/ShinDeck.git
+
 cd ShinDeck
 npm install
 npm run tauri build
