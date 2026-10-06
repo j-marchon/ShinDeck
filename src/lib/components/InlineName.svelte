@@ -16,7 +16,9 @@
   let error = $state<string | null>(null);
   let input = $state<HTMLInputElement>();
 
-  async function start(e: Event) {
+  async function start(e: MouseEvent) {
+    // Shift-click belongs to the card (it starts multi-select).
+    if (e.shiftKey) return;
     e.stopPropagation();
     draft = clip.name;
     error = null;
@@ -72,7 +74,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="inline-name" class:editing class:invalid={error} onclick={(e) => e.stopPropagation()}>
+<div class="inline-name" class:editing class:invalid={error} onclick={(e) => !e.shiftKey && e.stopPropagation()}>
   {#if editing}
     <input
       bind:this={input}

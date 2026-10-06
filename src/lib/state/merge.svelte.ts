@@ -1,6 +1,8 @@
 import { api, type Clip } from "../api";
 import { library } from "./library.svelte";
+import { selection } from "./selection.svelte";
 import { settings } from "./settings.svelte";
+import { toast } from "./toast.svelte";
 
 /**
  * Merging two clips: pick them in the gallery (`selecting`), then confirm the
@@ -16,12 +18,9 @@ class MergeState {
   running = $state(false);
   progress = $state(0);
   error = $state<string | null>(null);
-  /** Short-lived success message. */
-  notice = $state<string | null>(null);
-
-  #noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   start() {
+    selection.stop();
     this.selecting = true;
     this.picked = [];
     this.reviewing = false;
@@ -80,7 +79,7 @@ class MergeState {
       library.upsert(result.clip);
       this.running = false;
       this.stop();
-      this.#notify(`Saved as “${result.clip.name}”`);
+      toast.show(`Saved as “${result.clip.name}”`);
     } catch (e) {
       const message = String(e).replace(/^Error: /, "");
       if (message !== "Cancelled") this.error = message;
@@ -92,12 +91,6 @@ class MergeState {
 
   cancel() {
     api.cancelExport();
-  }
-
-  #notify(message: string) {
-    clearTimeout(this.#noticeTimer);
-    this.notice = message;
-    this.#noticeTimer = setTimeout(() => (this.notice = null), 3200);
   }
 }
 

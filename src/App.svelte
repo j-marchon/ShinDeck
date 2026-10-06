@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type Clip } from "./lib/api";
+  import BatchDialog from "./lib/components/BatchDialog.svelte";
   import DeleteDialog from "./lib/components/DeleteDialog.svelte";
   import EmptyState from "./lib/components/EmptyState.svelte";
   import Gallery from "./lib/components/Gallery.svelte";
@@ -16,6 +17,8 @@
   import { deletion } from "./lib/state/deletion.svelte";
   import { library } from "./lib/state/library.svelte";
   import { merge } from "./lib/state/merge.svelte";
+  import { selection } from "./lib/state/selection.svelte";
+  import { toast } from "./lib/state/toast.svelte";
   import { settings } from "./lib/state/settings.svelte";
   import { windowState } from "./lib/state/window.svelte";
 
@@ -72,7 +75,7 @@
   {#if screen === "setup"}
     <div class="body"><Setup oncomplete={onSetupComplete} /></div>
   {:else if screen === "library"}
-    <main class="body" inert={player !== null || showSettings || deletion.pending !== null || merge.reviewing}>
+    <main class="body" inert={player !== null || showSettings || deletion.pending !== null || merge.reviewing || selection.dialog !== null}>
       <Toolbar onrefresh={refresh} onsettings={() => (showSettings = true)} {refreshing} shortcuts={player === null} />
       {#if merge.selecting}<MergeBar />{/if}
       <div class="content">
@@ -116,8 +119,9 @@
     {#if merge.reviewing}
       <MergeDialog />
     {/if}
-    {#if merge.notice}
-      <div class="toast" role="status"><Icon name="check" size={15} /> {merge.notice}</div>
+    <BatchDialog />
+    {#if toast.message}
+      <div class="toast" role="status"><Icon name="check" size={15} /> {toast.message}</div>
     {/if}
   {/if}
 </div>
@@ -178,6 +182,7 @@
   .toast :global(svg) {
     color: var(--accent);
   }
+
   @keyframes toast {
     from {
       opacity: 0;

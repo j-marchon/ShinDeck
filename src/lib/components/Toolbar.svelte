@@ -1,6 +1,7 @@
 <script lang="ts">
   import { DATE_RANGES, library, SORT_OPTIONS } from "../state/library.svelte";
   import { merge } from "../state/merge.svelte";
+  import { selection } from "../state/selection.svelte";
   import { settings } from "../state/settings.svelte";
   import { plural } from "../util/format";
   import Dropdown from "./Dropdown.svelte";
@@ -28,6 +29,23 @@
 
   function onwindowkeydown(e: KeyboardEvent) {
     if (!shortcuts) return;
+    if (selection.active && !selection.dialog && document.activeElement?.matches("input, textarea") !== true) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        selection.stop();
+        return;
+      }
+      if (e.ctrlKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        selection.toggleAll();
+        return;
+      }
+      if (e.key === "Delete") {
+        e.preventDefault();
+        selection.open("delete");
+        return;
+      }
+    }
     if ((e.ctrlKey && e.key.toLowerCase() === "f") || (e.key === "/" && document.activeElement === document.body)) {
       e.preventDefault();
       search.focus();
@@ -45,8 +63,8 @@
 
 <svelte:window onkeydown={onwindowkeydown} />
 
-<header class="toolbar">
-  <div class="filters">
+<header class="toolbar" class:selecting={selection.active}>
+  <div class="filters" inert={selection.active}>
     <GameFilter />
 
     <Dropdown width={180}>
@@ -107,8 +125,17 @@
     {/if}
   </div>
 
-  <div class="right">
+  <div class="right" inert={selection.active}>
     <span class="count">{plural(library.visible.length, "clip")}</span>
+
+    <button
+      class="chip"
+      title="Select several clips (or Shift-click a clip)"
+      onclick={() => selection.start()}
+    >
+      <Icon name="selectCircle" size={15} />
+      Select
+    </button>
 
     <button
       class="chip"
@@ -153,10 +180,37 @@
       <Icon name="settings" size={16} />
     </button>
   </div>
+
+  {#if selection.active}
+    <!-- Centered over the faded toolbar; the actions jiggle once there's
+         something to act on, so they're easy to spot. -->
+    <div class="batch" role="toolbar" aria-label="Selected clips">
+      <span class="picked"><Icon name="selectCircle" size={15} /> {selection.count} selected</span>
+      <button class="chip" onclick={() => selection.toggleAll()} title="Ctrl + A">
+        {selection.allVisibleSelected ? "Select none" : "Select all"}
+      </button>
+      <div class="actions" class:jiggle={selection.count > 0}>
+        <button class="chip action" disabled={!selection.count} onclick={() => selection.favorite()}>
+          <Icon name="star" size={15} filled={selection.allFavorite} />
+          {selection.allFavorite ? "Unfavorite" : "Favorite"}
+        </button>
+        <button class="chip action" disabled={!selection.count} onclick={() => selection.open("rename")}>
+          <Icon name="tag" size={15} />
+          Rename
+        </button>
+        <button class="chip action danger" disabled={!selection.count} onclick={() => selection.open("delete")} title="Delete">
+          <Icon name="trash" size={15} />
+          Delete
+        </button>
+      </div>
+      <button class="chip done" onclick={() => selection.stop()} title="Esc">Done</button>
+    </div>
+  {/if}
 </header>
 
 <style>
   .toolbar {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -173,6 +227,96 @@
   .right {
     flex-shrink: 0;
   }
+  /* --- multi-select ---------------------------------------------------- */
+  .filters,
+  .right {
+    transition:
+      opacity 0.25s ease,
+      filter 0.25s ease;
+  }
+  .selecting .filters,
+  .selecting .right {
+    opacity: 0.12;
+    filter: blur(2px);
+  }
+  .batch {
+    position: absolute;
+    inset: 0 22px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    animation: batch-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  }
+  .picked {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-right: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+  .action {
+    color: var(--text);
+    background: var(--glass-2);
+  }
+  .action:hover:not(:disabled) {
+    background: var(--glass-3);
+  }
+  .action.danger:hover:not(:disabled) {
+    color: var(--danger);
+  }
+  .done {
+    color: #050505;
+    background: var(--accent);
+    font-weight: 600;
+  }
+  .done:hover {
+    color: #050505;
+    background: var(--accent-hover);
+  }
+  /* iOS "rearrange icons" wobble, each button slightly out of step. */
+  .jiggle .action {
+    animation: jiggle 0.32s ease-in-out infinite alternate;
+  }
+  .jiggle .action:nth-child(2) {
+    animation-delay: -0.11s;
+    animation-duration: 0.29s;
+  }
+  .jiggle .action:nth-child(3) {
+    animation-delay: -0.2s;
+    animation-duration: 0.35s;
+  }
+  .jiggle .action:hover {
+    animation-play-state: paused;
+  }
+  @keyframes jiggle {
+    from {
+      transform: rotate(-1.6deg) translateY(0.4px);
+    }
+    to {
+      transform: rotate(1.6deg) translateY(-0.4px);
+    }
+  }
+  @keyframes batch-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .jiggle .action {
+      animation: none;
+    }
+  }
+
   .chip:disabled {
     opacity: 0.4;
     cursor: not-allowed;

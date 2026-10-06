@@ -3,6 +3,7 @@
   import { deletion } from "../state/deletion.svelte";
   import { library } from "../state/library.svelte";
   import { merge } from "../state/merge.svelte";
+  import { selection } from "../state/selection.svelte";
   import { formatDuration, formatRelativeDate, formatSize } from "../util/format";
   import GameIcon from "./GameIcon.svelte";
   import Icon from "./Icon.svelte";
@@ -27,19 +28,22 @@
   const thumbFailed = $derived(failedUrl === thumbUrl);
   const favorite = $derived(library.isFavorite(clip.id));
   const gameName = $derived(library.gameName(clip.game));
-  // While picking clips to merge, a click selects instead of playing.
-  const selecting = $derived(merge.selecting);
-  const pickedAt = $derived(selecting ? merge.position(clip.id) : 0);
+  // While picking clips (to merge, or multi-select) a click selects instead
+  // of playing. Shift-click starts multi-select from anywhere.
+  const selecting = $derived(merge.selecting || selection.active);
+  const pickedAt = $derived(merge.selecting ? merge.position(clip.id) : 0);
+  const picked = $derived(merge.selecting ? pickedAt > 0 : selection.active && selection.has(clip.id));
 
-  function activate() {
-    if (selecting) merge.toggle(clip);
+  function activate(e: MouseEvent | KeyboardEvent) {
+    if (merge.selecting) merge.toggle(clip);
+    else if (selection.active || e.shiftKey) selection.click(clip, e.shiftKey);
     else onopen(clip);
   }
 
   function onkeydown(e: KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      activate();
+      activate(e);
     }
   }
 
@@ -62,10 +66,10 @@
 <div
   class="card"
   class:selecting
-  class:picked={pickedAt > 0}
+  class:picked
   role="button"
   tabindex="0"
-  aria-pressed={selecting ? pickedAt > 0 : undefined}
+  aria-pressed={selecting ? picked : undefined}
   onclick={activate}
   {onkeydown}
 >
@@ -85,8 +89,8 @@
     {/if}
 
     {#if selecting}
-      <span class="pick" class:on={pickedAt > 0}>
-        {#if pickedAt}{pickedAt}{/if}
+      <span class="pick" class:on={picked}>
+        {#if pickedAt}{pickedAt}{:else if picked}<Icon name="check" size={15} stroke={3} />{/if}
       </span>
     {:else}
       <div class="hover-play"><span><Icon name="play" size={22} /></span></div>
@@ -124,7 +128,11 @@
   </div>
 
   <div class="meta">
-    <InlineName {clip} />
+    {#if selecting}
+      <div class="plain-name">{clip.name}</div>
+    {:else}
+      <InlineName {clip} />
+    {/if}
     <div class="sub">
       <GameIcon game={clip.game} name={gameName} size={16} />
       <span class="game">{gameName}</span>
@@ -291,7 +299,29 @@
 
   /* Merge selection. */
   .card.picked .thumb {
-    box-shadow: 0 0 0 2px var(--accent);
+    box-shadow:
+      0 0 0 2.5px var(--accent),
+      0 0 18px -4px rgb(118 185 0 / 0.55);
+  }
+  .card.picked .thumb::after {
+    box-shadow: inset 0 0 0 1px rgb(118 185 0 / 0.5);
+  }
+  .card.selecting img {
+    transition:
+      opacity 0.25s ease,
+      transform 0.2s ease;
+  }
+  .card.picked img {
+    transform: scale(1.04);
+  }
+  .plain-name {
+    height: 24px;
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 24px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .pick {
     position: absolute;
@@ -317,7 +347,13 @@
   }
   .pick.on {
     background: var(--accent);
-    box-shadow: none;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.4);
+    animation: pop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.5);
+  }
+  @keyframes pop {
+    from {
+      transform: scale(0.6);
+    }
   }
 
   .edited-tag {

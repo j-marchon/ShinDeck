@@ -167,6 +167,86 @@ pub fn rename(state: &AppState, id: &str, name: &str) -> Result<Clip> {
     commit(state, &root, id, &target, false)
 }
 
+/// Outcome of an operation on several clips: one failure doesn't stop the
+/// rest. `error` is the first failure's reason.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Batch<T> {
+    pub done: Vec<T>,
+    pub failed: usize,
+    pub error: Option<String>,
+}
+
+impl<T> Batch<T> {
+    fn new() -> Self {
+        Self { done: Vec::new(), failed: 0, error: None }
+    }
+
+    fn record(&mut self, result: Result<T>) {
+        match result {
+            Ok(value) => self.done.push(value),
+            Err(e) => {
+                self.failed += 1;
+                self.error.get_or_insert_with(|| e.to_string());
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Renamed {
+    /// The clip's id before the rename.
+    pub from: String,
+    pub clip: Clip,
+}
+
+/// Renames clips, in the given order, to "{name} #n". Numbering continues
+/// after the highest "{name} #n" already in the library, and skips names
+/// taken on disk, so nothing is ever overwritten.
+pub fn rename_many(state: &AppState, ids: &[String], name: &str) -> Result<Batch<Renamed>> {
+    let root = library_root(state)?;
+    let base = files::validate_name(name)?.to_owned();
+    // Room for the " #n" suffix.
+    files::validate_name(&format!("{base} #{}", 1_000_000))?;
+
+    let mut next = state
+        .index
+        .read()
+        .unwrap()
+        .paths()
+        .filter_map(|p| files::numbered(&p.file_stem()?.to_string_lossy(), &base))
+        .max()
+        .unwrap_or(0)
+        + 1;
+
+    let mut batch = Batch::new();
+    for id in ids {
+        let result = clip_path(state, id).and_then(|path| {
+            let ext =
+                path.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+            let (n, target) = (next..)
+                .map(|n| (n, path.with_file_name(format!("{base} #{n}.{ext}"))))
+                .find(|(_, p)| !p.exists())
+                .expect("unbounded search");
+            files::rename(&path, &target)?;
+            next = n + 1;
+            Ok(Renamed { from: id.clone(), clip: commit(state, &root, id, &target, false)? })
+        });
+        batch.record(result);
+    }
+    Ok(batch)
+}
+
+/// Moves several clips to the Recycle Bin. `done` lists the removed ids.
+pub fn delete_many(state: &AppState, ids: &[String]) -> Batch<String> {
+    let mut batch = Batch::new();
+    for id in ids {
+        batch.record(delete(state, id).map(|()| id.clone()));
+    }
+    batch
+}
+
 /// Moves a clip to the Recycle Bin and drops its favorite/edited marks and
 /// index entry. A clip that is already gone counts as removed.
 pub fn delete(state: &AppState, id: &str) -> Result<()> {
@@ -367,7 +447,45 @@ pub fn merge(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::IdSet;
     use std::process::Command;
+
+    #[test]
+    fn renames_and_removes_in_batches() {
+        let base = std::env::temp_dir().join(format!("shindeck-batch-{}", std::process::id()));
+        let root = base.join("clips");
+        fs::create_dir_all(root.join("Valorant")).unwrap();
+        fs::create_dir_all(root.join("Apex")).unwrap();
+        for name in ["Valorant/a.mp4", "Valorant/b.mp4", "Apex/c.mp4", "Apex/Ace #4.mp4"] {
+            fs::write(root.join(name), "x").unwrap();
+        }
+        let state = AppState::new(&base.join("config"), &base.join("cache"));
+        state.settings.lock().unwrap().value.library_path = Some(root.clone());
+        let index = state.index.read().unwrap();
+        let marks = Marks { favorites: &IdSet::default(), edited: &IdSet::default() };
+        let scanned = library::scan(&root, &marks, &index).unwrap();
+        drop(index);
+        state.index.write().unwrap().replace(&scanned);
+
+        let ids: Vec<String> = ["Valorant/b.mp4", "Apex/c.mp4", "Valorant/a.mp4", "missing.mp4"]
+            .map(String::from)
+            .to_vec();
+        let batch = rename_many(&state, &ids, "ace").unwrap();
+        let names: Vec<&str> = batch.done.iter().map(|r| r.clip.name.as_str()).collect();
+        // Continues after the existing "Ace #4", in the order given.
+        assert_eq!(names, ["ace #5", "ace #6", "ace #7"]);
+        assert_eq!(batch.done[1].from, "Apex/c.mp4");
+        assert_eq!((batch.failed, batch.error.is_some()), (1, true));
+        assert!(root.join("Valorant/ace #5.mp4").exists());
+        assert!(!root.join("Valorant/b.mp4").exists());
+
+        // A clip already gone from disk counts as removed (no trash needed here).
+        fs::remove_file(root.join("Apex/ace #6.mp4")).unwrap();
+        let removed = delete_many(&state, &["Apex/c.mp4".into(), "Apex/ace #6.mp4".into()]);
+        assert_eq!((removed.done.len(), removed.failed), (1, 1));
+
+        fs::remove_dir_all(&base).unwrap();
+    }
 
     /// End-to-end check against a real ffmpeg; skipped when none is installed.
     #[test]

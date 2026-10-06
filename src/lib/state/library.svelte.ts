@@ -1,4 +1,4 @@
-import { api, type Clip, type Game } from "../api";
+import { api, type Batch, type Clip, type Game, type Renamed } from "../api";
 import { storedValue } from "../util/storage";
 
 export type SortKey = "date" | "name" | "game" | "size";
@@ -143,6 +143,41 @@ class LibraryState {
       console.error("Could not save favorite", e);
       this.#setFavoriteLocal(id, !favorite);
     }
+  }
+
+  /** Favorites (or unfavorites) several clips at once. */
+  async setFavorites(ids: string[], favorite: boolean) {
+    const before = this.favorites;
+    const next = new Set(before);
+    for (const id of ids) {
+      if (favorite) next.add(id);
+      else next.delete(id);
+    }
+    const apply = (set: ReadonlySet<string>) => {
+      this.favorites = set;
+      this.clips = this.clips.map((c) => (c.favorite === set.has(c.id) ? c : { ...c, favorite: set.has(c.id) }));
+    };
+    apply(next); // optimistic
+    try {
+      await api.setFavorites(ids, favorite);
+    } catch (e) {
+      apply(before);
+      throw e;
+    }
+  }
+
+  /** Renames clips, in order, to "{name} #n". */
+  async renameMany(ids: string[], name: string): Promise<Batch<Renamed>> {
+    const batch = await api.renameClips(ids, name);
+    for (const { from, clip } of batch.done) this.upsert(clip, from);
+    return batch;
+  }
+
+  /** Moves several clips to the Recycle Bin. */
+  async removeMany(ids: string[]): Promise<Batch<string>> {
+    const batch = await api.deleteClips(ids);
+    for (const id of batch.done) this.forget(id);
+    return batch;
   }
 
   /** Renames on disk; returns the updated clip. Throws a readable message on failure. */

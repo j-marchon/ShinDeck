@@ -76,6 +76,11 @@ impl ClipIndex {
         self.entries.get(id)
     }
 
+    /// Every known clip file.
+    pub fn paths(&self) -> impl Iterator<Item = &std::path::Path> {
+        self.entries.values().map(|e| e.path.as_path())
+    }
+
     pub(crate) fn cached_duration(
         &self,
         id: &str,

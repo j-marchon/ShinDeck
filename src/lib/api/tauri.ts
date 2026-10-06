@@ -2,7 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Backend, Clip, FolderSummary, Library, Merged, Settings } from "./types";
+import type { Backend, Batch, Clip, FolderSummary, Library, Merged, Renamed, Settings } from "./types";
 
 const appWindow = getCurrentWindow();
 
@@ -13,8 +13,10 @@ export const tauriBackend: Backend = {
   setLibraryPath: (path) => invoke<Settings>("set_library_path", { path }),
   scanLibrary: () => invoke<Library>("scan_library"),
   setFavorite: (id, favorite) => invoke("set_favorite", { id, favorite }),
+  setFavorites: (ids, favorite) => invoke("set_favorites", { ids, favorite }),
   revealClip: (id) => invoke("reveal_clip", { id }),
   renameClip: (id, name) => invoke<Clip>("rename_clip", { id, name }),
+  renameClips: (ids, name) => invoke<Batch<Renamed>>("rename_clips", { ids, name }),
   exportClip: (id, spec, destination) => invoke<Clip>("export_clip", { id, spec, destination }),
   mergeClips: (ids, destination) => invoke<Merged>("merge_clips", { ids, destination }),
   cancelExport: () => invoke("cancel_export"),
@@ -22,6 +24,7 @@ export const tauriBackend: Backend = {
   setSaveMode: (mode) => invoke<Settings>("set_save_mode", { mode }),
   setConfirmDelete: (confirm) => invoke<Settings>("set_confirm_delete", { confirm }),
   deleteClip: (id) => invoke("delete_clip", { id }),
+  deleteClips: (ids) => invoke<Batch<string>>("delete_clips", { ids }),
 
   async pickFolder(defaultPath) {
     const picked = await open({ directory: true, defaultPath, title: "Choose your ShadowPlay clips folder" });

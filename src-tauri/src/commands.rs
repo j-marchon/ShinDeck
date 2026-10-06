@@ -110,6 +110,20 @@ pub fn set_favorite(state: State<'_, AppState>, id: String, favorite: bool) -> R
     Ok(())
 }
 
+/// Favorites or unfavorites several clips with a single save.
+#[tauri::command]
+pub fn set_favorites(state: State<'_, AppState>, ids: Vec<String>, favorite: bool) -> Result<()> {
+    let mut favorites = state.favorites.lock().unwrap();
+    let mut changed = false;
+    for id in &ids {
+        changed |= favorites.value.set(id, favorite);
+    }
+    if changed {
+        favorites.save()?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn reveal_clip(state: State<'_, AppState>, id: String) -> Result<()> {
     let path = state
@@ -149,6 +163,29 @@ pub async fn delete_clip(app: AppHandle, id: String) -> Result<()> {
     tauri::async_runtime::spawn_blocking(move || editor::delete(&app.state::<AppState>(), &id))
         .await
         .map_err(|e| Error::Message(e.to_string()))?
+}
+
+#[tauri::command]
+pub async fn delete_clips(app: AppHandle, ids: Vec<String>) -> Result<editor::Batch<String>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        editor::delete_many(&app.state::<AppState>(), &ids)
+    })
+    .await
+    .map_err(|e| Error::Message(e.to_string()))
+}
+
+/// Renames clips, in order, to "{name} #1", "{name} #2"…
+#[tauri::command]
+pub async fn rename_clips(
+    app: AppHandle,
+    ids: Vec<String>,
+    name: String,
+) -> Result<editor::Batch<editor::Renamed>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        editor::rename_many(&app.state::<AppState>(), &ids, &name)
+    })
+    .await
+    .map_err(|e| Error::Message(e.to_string()))?
 }
 
 #[tauri::command]

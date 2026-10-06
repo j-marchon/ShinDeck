@@ -64,6 +64,20 @@ pub fn merge_path(dir: &Path, game: &str, count: u32) -> (u32, PathBuf) {
         .expect("unbounded search")
 }
 
+/// `n` when `stem` is "{name} #n" (case-insensitive, like Windows names).
+pub fn numbered(stem: &str, name: &str) -> Option<u32> {
+    let prefix = format!("{name} #");
+    let head = stem.get(..prefix.len())?;
+    if head.to_lowercase() != prefix.to_lowercase() {
+        return None;
+    }
+    let digits = &stem[prefix.len()..];
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
 /// Hidden work file next to `near`. The leading dot keeps it out of the
 /// gallery while it is being written.
 pub fn temp_path(near: &Path, tag: &str) -> PathBuf {
@@ -189,6 +203,17 @@ mod tests {
         assert_eq!(merge_path(&dir, "Valorant", 2), (4, dir.join("Valorant Merge #4.mp4")));
         assert_eq!(merge_path(&dir, "Valorant", 4).0, 5);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn reads_batch_numbers() {
+        assert_eq!(numbered("Ace #3", "Ace"), Some(3));
+        assert_eq!(numbered("ace #12", "Ace"), Some(12));
+        assert_eq!(numbered("Ace #", "Ace"), None);
+        assert_eq!(numbered("Ace #2b", "Ace"), None);
+        assert_eq!(numbered("Aces #2", "Ace"), None);
+        assert_eq!(numbered("Ace", "Ace"), None);
+        assert_eq!(numbered("Élan #4", "élan"), Some(4));
     }
 
     #[test]

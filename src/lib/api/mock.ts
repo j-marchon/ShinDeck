@@ -4,7 +4,7 @@
  * UI can be developed and screenshotted without Windows or real clips.
  * Drop any `sample.webm` into `dev-media/` (git-ignored) to test playback.
  */
-import type { Backend, Clip, Game, Library, Settings } from "./types";
+import type { Backend, Batch, Clip, Game, Library, Renamed, Settings } from "./types";
 
 const GAMES: [string, number, number][] = [
   // name, clip count, hue
@@ -125,6 +125,31 @@ export const mockBackend: Backend = {
     if (favorite) favorites.add(id);
     else favorites.delete(id);
   },
+  async setFavorites(ids, favorite) {
+    for (const id of ids) {
+      if (favorite) favorites.add(id);
+      else favorites.delete(id);
+    }
+  },
+  async renameClips(ids, name) {
+    await delay(200);
+    name = name.trim();
+    if (!name) throw new Error("The name can't be empty");
+    if (/[<>:"/\\|?*]/.test(name)) throw new Error("Names can't contain < > : \" / \\ | ? *");
+    const pattern = new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} #(\\d+)$`, "i");
+    let next = Math.max(0, ...clips.map((c) => Number(pattern.exec(c.name)?.[1] ?? 0))) + 1;
+    const batch: Batch<Renamed> = { done: [], failed: 0, error: null };
+    for (const id of ids) {
+      const clip = clips.find((c) => c.id === id);
+      if (!clip) {
+        batch.failed++;
+        batch.error ??= "Clip not found; it may have been moved or deleted";
+        continue;
+      }
+      batch.done.push({ from: id, clip: await this.renameClip(id, `${name} #${next++}`) });
+    }
+    return batch;
+  },
   async revealClip(id) {
     console.info("[mock] reveal", id);
   },
@@ -212,6 +237,20 @@ export const mockBackend: Backend = {
     favorites.delete(id);
     edited.delete(id);
     clips = clips.filter((c) => c.id !== id);
+  },
+  async deleteClips(ids) {
+    await delay(200);
+    const batch: Batch<string> = { done: [], failed: 0, error: null };
+    for (const id of ids) {
+      if (!clips.some((c) => c.id === id)) {
+        batch.failed++;
+        batch.error ??= "Clip not found";
+        continue;
+      }
+      await this.deleteClip(id);
+      batch.done.push(id);
+    }
+    return batch;
   },
   async pickFolder() {
     return "D:\\Captures\\ShadowPlay";

@@ -50,6 +50,20 @@ export interface Clip {
   edited: boolean;
 }
 
+/** Result of an operation on several clips; one failure doesn't stop the rest. */
+export interface Batch<T> {
+  done: T[];
+  failed: number;
+  /** The first failure's reason. */
+  error: string | null;
+}
+
+export interface Renamed {
+  /** The clip's id before the rename. */
+  from: string;
+  clip: Clip;
+}
+
 /** Result of merging clips. */
 export interface Merged {
   /** The new "{Game} Merge #n" clip. */
@@ -79,8 +93,11 @@ export interface Backend {
   setLibraryPath(path: string): Promise<Settings>;
   scanLibrary(): Promise<Library>;
   setFavorite(id: string, favorite: boolean): Promise<void>;
+  setFavorites(ids: string[], favorite: boolean): Promise<void>;
   revealClip(id: string): Promise<void>;
   renameClip(id: string, name: string): Promise<Clip>;
+  /** Renames the clips, in order, to "{name} #n", continuing after numbers in use. */
+  renameClips(ids: string[], name: string): Promise<Batch<Renamed>>;
   exportClip(id: string, spec: EditSpec, destination: Destination): Promise<Clip>;
   /** Joins the clips end to end, in this order. Progress arrives via onExportProgress. */
   mergeClips(ids: string[], destination: Destination): Promise<Merged>;
@@ -91,6 +108,8 @@ export interface Backend {
   setConfirmDelete(confirm: boolean): Promise<Settings>;
   /** Moves the clip file to the Recycle Bin. */
   deleteClip(id: string): Promise<void>;
+  /** Moves several clips to the Recycle Bin; `done` lists the removed ids. */
+  deleteClips(ids: string[]): Promise<Batch<string>>;
   pickFolder(defaultPath?: string): Promise<string | null>;
   onLibraryChanged(handler: () => void): Promise<() => void>;
   toggleFullscreen(): Promise<boolean>;
