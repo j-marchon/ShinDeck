@@ -17,6 +17,10 @@ class SettingsState {
     this.value = await api.setConfirmDelete(confirm);
   }
 
+  async setMergeReplace(replace: boolean) {
+    this.value = await api.setMergeReplace(replace);
+  }
+
   /** Where edits go without asking, or null when the user must be asked. */
   get defaultDestination(): Destination | null {
     const mode = this.value?.saveMode;

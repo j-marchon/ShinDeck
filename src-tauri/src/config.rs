@@ -36,11 +36,18 @@ pub struct Settings {
     /// Set when the user opted out of the "move to Recycle Bin?" prompt.
     /// Stored inverted so a missing key (older settings files) keeps asking.
     pub skip_delete_confirm: bool,
+    /// Whether a merge replaces its originals. `None` until the user picks,
+    /// in which case it follows the edit save mode.
+    pub merge_replace: Option<bool>,
 }
 
 impl Settings {
     pub fn setup_complete(&self) -> bool {
         self.library_path.is_some()
+    }
+
+    pub fn merge_replace(&self) -> bool {
+        self.merge_replace.unwrap_or(self.save_mode == Some(SaveMode::Replace))
     }
 }
 

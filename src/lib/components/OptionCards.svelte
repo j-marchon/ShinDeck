@@ -19,6 +19,7 @@
 <div class="options" role="radiogroup">
   {#each options as option (String(option.value))}
     <button
+      type="button"
       class="option"
       class:selected={value === option.value}
       role="radio"

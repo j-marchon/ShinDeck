@@ -19,6 +19,8 @@ pub struct SettingsView {
     save_mode: Option<SaveMode>,
     /// Whether removing a clip asks for confirmation first.
     confirm_delete: bool,
+    /// Whether merging moves the originals to the Recycle Bin by default.
+    merge_replace: bool,
     /// Whether the editor can run (ffmpeg found).
     editing_available: bool,
 }
@@ -31,6 +33,7 @@ pub fn get_settings(state: State<'_, AppState>) -> SettingsView {
         setup_complete: settings.setup_complete(),
         save_mode: settings.save_mode,
         confirm_delete: !settings.skip_delete_confirm,
+        merge_replace: settings.merge_replace(),
         editing_available: editor::ffmpeg::path().is_some(),
     }
 }
@@ -152,6 +155,16 @@ pub fn set_confirm_delete(state: State<'_, AppState>, confirm: bool) -> Result<S
     {
         let mut settings = state.settings.lock().unwrap();
         settings.value.skip_delete_confirm = !confirm;
+        settings.save()?;
+    }
+    Ok(get_settings(state))
+}
+
+#[tauri::command]
+pub fn set_merge_replace(state: State<'_, AppState>, replace: bool) -> Result<SettingsView> {
+    {
+        let mut settings = state.settings.lock().unwrap();
+        settings.value.merge_replace = Some(replace);
         settings.save()?;
     }
     Ok(get_settings(state))

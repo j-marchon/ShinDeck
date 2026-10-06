@@ -11,6 +11,8 @@ export interface Settings {
   saveMode: SaveMode | null;
   /** Ask before moving a clip to the Recycle Bin. */
   confirmDelete: boolean;
+  /** Merges move both originals to the Recycle Bin by default. */
+  mergeReplace: boolean;
   /** False when the bundled ffmpeg is missing. */
   editingAvailable: boolean;
 }
@@ -106,6 +108,7 @@ export interface Backend {
   onExportProgress(handler: (progress: number) => void): Promise<() => void>;
   setSaveMode(mode: SaveMode): Promise<Settings>;
   setConfirmDelete(confirm: boolean): Promise<Settings>;
+  setMergeReplace(replace: boolean): Promise<Settings>;
   /** Moves the clip file to the Recycle Bin. */
   deleteClip(id: string): Promise<void>;
   /** Moves several clips to the Recycle Bin; `done` lists the removed ids. */

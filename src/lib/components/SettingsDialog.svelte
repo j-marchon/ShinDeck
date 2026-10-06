@@ -4,6 +4,7 @@
   import { settings } from "../state/settings.svelte";
   import Icon from "./Icon.svelte";
   import DeleteConfirmOptions from "./DeleteConfirmOptions.svelte";
+  import MergeModeOptions from "./MergeModeOptions.svelte";
   import Modal from "./Modal.svelte";
   import SaveModeOptions from "./SaveModeOptions.svelte";
 
@@ -45,6 +46,14 @@
     <DeleteConfirmOptions
       value={settings.value?.confirmDelete ?? true}
       onchange={(confirm) => settings.setConfirmDelete(confirm)}
+    />
+  </section>
+
+  <section>
+    <h3>When merging clips</h3>
+    <MergeModeOptions
+      value={settings.value?.mergeReplace ?? false}
+      onchange={(replace) => settings.setMergeReplace(replace)}
     />
   </section>
 

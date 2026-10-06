@@ -23,6 +23,7 @@ export const tauriBackend: Backend = {
   onExportProgress: (handler) => listen<number>("export-progress", (e) => handler(e.payload)),
   setSaveMode: (mode) => invoke<Settings>("set_save_mode", { mode }),
   setConfirmDelete: (confirm) => invoke<Settings>("set_confirm_delete", { confirm }),
+  setMergeReplace: (replace) => invoke<Settings>("set_merge_replace", { replace }),
   deleteClip: (id) => invoke("delete_clip", { id }),
   deleteClips: (ids) => invoke<Batch<string>>("delete_clips", { ids }),
 

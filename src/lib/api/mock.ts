@@ -38,7 +38,7 @@ let root = "C:\\Videos";
 const favorites = new Set<string>();
 const edited = new Set<string>();
 let clips: Clip[] = [];
-let settings: Settings = { libraryPath: null, setupComplete: false, saveMode: null, confirmDelete: true, editingAvailable: true };
+let settings: Settings = { libraryPath: null, setupComplete: false, saveMode: null, confirmDelete: true, mergeReplace: false, editingAvailable: true };
 const progressHandlers = new Set<(p: number) => void>();
 let cancelled = false;
 const mergeCounts = new Map<string, number>();
@@ -229,6 +229,10 @@ export const mockBackend: Backend = {
   },
   async setConfirmDelete(confirm) {
     settings = { ...settings, confirmDelete: confirm };
+    return settings;
+  },
+  async setMergeReplace(replace) {
+    settings = { ...settings, mergeReplace: replace };
     return settings;
   },
   async deleteClip(id) {

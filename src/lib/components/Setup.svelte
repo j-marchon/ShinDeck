@@ -1,9 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type FolderSummary } from "../api";
+  import { api, type FolderSummary, type SaveMode } from "../api";
+  import { settings } from "../state/settings.svelte";
   import { plural } from "../util/format";
+  import DeleteConfirmOptions from "./DeleteConfirmOptions.svelte";
   import Icon from "./Icon.svelte";
   import Logo from "./Logo.svelte";
+  import MergeModeOptions from "./MergeModeOptions.svelte";
+  import SaveModeOptions from "./SaveModeOptions.svelte";
 
   let {
     initialPath = null,
@@ -22,6 +26,13 @@
   let checking = $state(false);
   let saving = $state(false);
   let error = $state<string | null>(null);
+  /** First launch walks through the folder, then the preferences. */
+  let step = $state<"folder" | "preferences">("folder");
+
+  // Preferences, saved together when setup finishes.
+  let saveMode = $state<SaveMode>(settings.value?.saveMode ?? "ask");
+  let confirmDelete = $state(settings.value?.confirmDelete ?? true);
+  let mergeReplace = $state(settings.value?.mergeReplace ?? false);
 
   onMount(async () => {
     defaultPath = await api.defaultClipsFolder();
@@ -58,6 +69,11 @@
     saving = true;
     error = null;
     try {
+      if (!initialPath) {
+        await api.setSaveMode(saveMode);
+        await api.setConfirmDelete(confirmDelete);
+        await api.setMergeReplace(mergeReplace);
+      }
       await api.setLibraryPath(path.trim());
       oncomplete();
     } catch (e) {
@@ -73,59 +89,96 @@
   <div class="panel">
     <div class="hero">
       <Logo size={64} />
-      <h1>{initialPath ? "Clips folder" : "Welcome to ShinDeck"}</h1>
+      <h1>{initialPath ? "Clips folder" : step === "folder" ? "Welcome to ShinDeck" : "Your preferences"}</h1>
       <p>
-        Choose the folder where ShadowPlay saves your recordings. Each game gets its own folder inside it, and
-        ShinDeck organises your clips the same way.
+        {#if step === "folder"}
+          Choose the folder where ShadowPlay saves your recordings. Each game gets its own folder inside it, and
+          ShinDeck organises your clips the same way.
+        {:else}
+          Decide how ShinDeck handles your clips. You can change any of this later in Settings.
+        {/if}
       </p>
     </div>
 
-    <form
-      onsubmit={(e) => {
-        e.preventDefault();
-        if (summary?.exists) confirm();
-      }}
-    >
-      <label class="field-label" for="clips-path">Clips folder</label>
-      <div class="field">
-        <span class="field-icon"><Icon name="folder" size={17} /></span>
-        <input id="clips-path" bind:value={path} spellcheck="false" autocomplete="off" />
-        <button type="button" class="browse" onclick={browse}>Browse…</button>
-      </div>
+    {#if step === "preferences"}
+      <form
+        onsubmit={(e) => {
+          e.preventDefault();
+          confirm();
+        }}
+      >
+        <section>
+          <h2 class="field-label">When saving an edit</h2>
+          <SaveModeOptions value={saveMode} onchange={(mode) => (saveMode = mode)} />
+        </section>
+        <section>
+          <h2 class="field-label">When removing a clip</h2>
+          <DeleteConfirmOptions value={confirmDelete} onchange={(confirm) => (confirmDelete = confirm)} />
+        </section>
+        <section>
+          <h2 class="field-label">When merging clips</h2>
+          <MergeModeOptions value={mergeReplace} onchange={(replace) => (mergeReplace = replace)} />
+        </section>
 
-      <div class="status" aria-live="polite">
-        {#if checking}
-          <span class="muted">Checking folder…</span>
-        {:else if summary && !summary.exists}
-          <span class="bad"><Icon name="alert" size={15} /> This folder doesn't exist.</span>
-        {:else if summary && summary.clipCount === 0}
-          <span class="warn">
-            <Icon name="alert" size={15} /> No clips here yet. That's fine: new clips show up automatically.
-          </span>
-        {:else if summary}
-          <span class="good">
-            <Icon name="check" size={15} />
-            Found {plural(summary.clipCount, "clip")} across {plural(summary.gameCount, "game")}.
-          </span>
+        {#if error}
+          <p class="error">{error}</p>
         {/if}
-        {#if defaultPath && path.trim() !== defaultPath}
-          <button type="button" class="link" onclick={() => (path = defaultPath)}>Use ShadowPlay default</button>
-        {/if}
-      </div>
 
-      {#if error}
-        <p class="error">{error}</p>
-      {/if}
+        <div class="actions">
+          <button type="button" class="secondary" onclick={() => (step = "folder")} disabled={saving}>Back</button>
+          <button type="submit" class="primary" disabled={saving}>Get started</button>
+        </div>
+      </form>
+    {:else}
+      <form
+        onsubmit={(e) => {
+          e.preventDefault();
+          if (!summary?.exists) return;
+          if (initialPath) confirm();
+          else step = "preferences";
+        }}
+      >
+        <label class="field-label" for="clips-path">Clips folder</label>
+        <div class="field">
+          <span class="field-icon"><Icon name="folder" size={17} /></span>
+          <input id="clips-path" bind:value={path} spellcheck="false" autocomplete="off" />
+          <button type="button" class="browse" onclick={browse}>Browse…</button>
+        </div>
 
-      <div class="actions">
-        {#if oncancel}
-          <button type="button" class="secondary" onclick={oncancel}>Cancel</button>
+        <div class="status" aria-live="polite">
+          {#if checking}
+            <span class="muted">Checking folder…</span>
+          {:else if summary && !summary.exists}
+            <span class="bad"><Icon name="alert" size={15} /> This folder doesn't exist.</span>
+          {:else if summary && summary.clipCount === 0}
+            <span class="warn">
+              <Icon name="alert" size={15} /> No clips here yet. That's fine: new clips show up automatically.
+            </span>
+          {:else if summary}
+            <span class="good">
+              <Icon name="check" size={15} />
+              Found {plural(summary.clipCount, "clip")} across {plural(summary.gameCount, "game")}.
+            </span>
+          {/if}
+          {#if defaultPath && path.trim() !== defaultPath}
+            <button type="button" class="link" onclick={() => (path = defaultPath)}>Use ShadowPlay default</button>
+          {/if}
+        </div>
+
+        {#if error}
+          <p class="error">{error}</p>
         {/if}
-        <button type="submit" class="primary" disabled={!summary?.exists || saving}>
-          {initialPath ? "Save" : "Continue"}
-        </button>
-      </div>
-    </form>
+
+        <div class="actions">
+          {#if oncancel}
+            <button type="button" class="secondary" onclick={oncancel}>Cancel</button>
+          {/if}
+          <button type="submit" class="primary" disabled={!summary?.exists || saving}>
+            {initialPath ? "Save" : "Continue"}
+          </button>
+        </div>
+      </form>
+    {/if}
   </div>
 </div>
 
@@ -136,7 +189,7 @@
     display: grid;
     place-items: center;
     padding: 32px;
-    overflow: hidden;
+    overflow: hidden auto;
   }
   .glow {
     position: absolute;
@@ -178,6 +231,9 @@
     line-height: 1.55;
   }
 
+  section + section {
+    margin-top: 20px;
+  }
   .field-label {
     display: block;
     margin-bottom: 8px;
@@ -298,7 +354,11 @@
     color: var(--text-dim);
     background: var(--glass);
   }
-  .secondary:hover {
+  .secondary:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .secondary:hover:not(:disabled) {
     color: var(--text);
     background: var(--glass-2);
   }

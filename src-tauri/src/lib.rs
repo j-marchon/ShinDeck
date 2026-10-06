@@ -53,6 +53,7 @@ pub fn run() {
             commands::reveal_clip,
             commands::set_save_mode,
             commands::set_confirm_delete,
+            commands::set_merge_replace,
             commands::delete_clip,
             commands::delete_clips,
             commands::rename_clip,

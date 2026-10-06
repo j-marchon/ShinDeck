@@ -25,7 +25,7 @@ class MergeState {
     this.picked = [];
     this.reviewing = false;
     this.error = null;
-    this.replace = settings.value?.saveMode === "replace";
+    this.replace = settings.value?.mergeReplace ?? false;
   }
 
   stop() {
