@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import { api, type Clip } from "../../api";
+  import { deletion } from "../../state/deletion.svelte";
   import { editor } from "../../state/editor.svelte";
   import { library } from "../../state/library.svelte";
   import { formatLongDate, formatSize, formatTime } from "../../util/format";
@@ -224,6 +225,43 @@
     onclose(clip.id);
   }
 
+  /** Moves the clip to the Recycle Bin (after the usual confirmation). */
+  async function remove() {
+    if (editor.running || trimming) return;
+    const target = clip;
+    video.pause();
+    // The confirmation can't show above a fullscreen player.
+    if (fullscreen) {
+      await api.setFullscreen(false);
+      fullscreen = false;
+    }
+    deletion.request(target, {
+      release: async () => {
+        // Let go of the file so Windows allows recycling it.
+        released = true;
+        await tick();
+        video.load();
+      },
+      restore: () => (released = false),
+      removed: () => {
+        released = false;
+        drop(target.id);
+      },
+    });
+  }
+
+  /** Takes a removed clip out of the playlist; the next one takes its place. */
+  function drop(id: string) {
+    const at = list.findIndex((c) => c.id === id);
+    if (at < 0) return;
+    if (list.length === 1) {
+      onclose(id);
+      return;
+    }
+    list = list.filter((c) => c.id !== id);
+    if (at < index || index >= list.length) index--;
+  }
+
   function updateBuffered() {
     const ranges = video.buffered;
     bufferedEnd = ranges.length ? ranges.end(ranges.length - 1) : 0;
@@ -309,7 +347,7 @@
   // --- keyboard ----------------------------------------------------------
 
   function onkeydown(e: KeyboardEvent) {
-    if (editor.prompt) return;
+    if (editor.prompt || deletion.pending) return;
     if (e.ctrlKey && e.key.toLowerCase() === "s" && editing) {
       e.preventDefault();
       save();
@@ -390,6 +428,9 @@
       case "e":
         editing = !editing;
         return handled();
+      case "Delete":
+        remove();
+        return handled();
       case "?":
         showHelp = !showHelp;
         return handled();
@@ -407,6 +448,7 @@
     ["F", "Fullscreen"],
     ["S", "Favorite"],
     ["E", "Edit panel"],
+    ["Delete", "Move to Recycle Bin"],
     ["Enter", "Done (while trimming)"],
     ["Ctrl + S", "Save edits"],
     ["Esc", "Leave trim / back to gallery"],
@@ -481,6 +523,15 @@
         </button>
         <button class="icon-btn" onclick={() => api.revealClip(clip.id)} title="Show in folder" aria-label="Show in folder">
           <Icon name="folderOpen" size={17} />
+        </button>
+        <button
+          class="icon-btn remove"
+          onclick={remove}
+          disabled={editor.running || trimming}
+          title="Move to Recycle Bin (Del)"
+          aria-label="Remove clip"
+        >
+          <Icon name="trash" size={17} />
         </button>
         <button class="edit-btn" class:active={editing} aria-pressed={editing} title="Edit (E)" onclick={() => (editing = !editing)}>
           <Icon name="pencil" size={14} />
@@ -863,6 +914,13 @@
   }
   .icon-btn.starred {
     color: var(--accent);
+  }
+  .icon-btn.remove:hover:not(:disabled) {
+    color: var(--danger);
+  }
+  .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
   .edit-btn {
     display: flex;
