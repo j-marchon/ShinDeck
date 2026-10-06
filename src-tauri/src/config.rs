@@ -1,10 +1,11 @@
-//! Persistent user data: settings, favorites and the "edited in ShinDeck" marks.
+//! Persistent user data: settings, favorites, the "edited in ShinDeck" marks
+//! and the per-game merge counters.
 //!
 //! All live as small JSON files in the per-user app config directory
 //! (`%APPDATA%\com.shindeck.app` on Windows) and are written atomically so a
 //! crash can never leave a half-written file behind.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -72,6 +73,22 @@ impl IdSet {
         } else {
             false
         }
+    }
+}
+
+/// How many merges were made per game (keyed by game id), which numbers the
+/// merged files: "Valorant Merge #3".
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct MergeCounts(BTreeMap<String, u32>);
+
+impl MergeCounts {
+    pub fn get(&self, game: &str) -> u32 {
+        self.0.get(game).copied().unwrap_or(0)
+    }
+
+    pub fn set(&mut self, game: &str, count: u32) {
+        self.0.insert(game.to_owned(), count);
     }
 }
 

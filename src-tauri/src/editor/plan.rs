@@ -89,6 +89,18 @@ fn size_budget(target_bytes: u64, duration: f64, probe: &Probe) -> Result<(f64, 
     Ok((video_kbps.floor(), audio_kbps, height.min(probe.height), cap_fps))
 }
 
+/// Near-transparent quality when there is no size target.
+fn quality_video_args(encoder: Encoder) -> Vec<String> {
+    let args = match encoder {
+        Encoder::Nvenc => "-c:v h264_nvenc -preset p5 -tune hq -rc vbr -cq 19 -b:v 0",
+        Encoder::X264 => "-c:v libx264 -preset veryfast -crf 18",
+    };
+    args.split(' ').map(String::from).collect()
+}
+
+const OUTPUT_ARGS: [&str; 7] =
+    ["-movflags", "+faststart", "-f", "mp4", "-progress", "pipe:1", "-nostats"];
+
 fn secs(t: f64) -> String {
     format!("{t:.3}")
 }
@@ -160,13 +172,7 @@ pub fn build(
 
     // --- encoders -----------------------------------------------------------
     let video: Vec<String> = match (encoder, budget) {
-        (Encoder::Nvenc, None) => "-c:v h264_nvenc -preset p5 -tune hq -rc vbr -cq 19 -b:v 0"
-            .split(' ')
-            .map(String::from)
-            .collect(),
-        (Encoder::X264, None) => {
-            "-c:v libx264 -preset veryfast -crf 18".split(' ').map(String::from).collect()
-        }
+        (_, None) => quality_video_args(encoder),
         (Encoder::Nvenc, Some((v, ..))) => vec![
             "-c:v".into(),
             "h264_nvenc".into(),
@@ -201,10 +207,80 @@ pub fn build(
         let audio_kbps = budget.map_or(192.0, |(_, a, ..)| a);
         args.extend(["-c:a".into(), "aac".into(), "-b:a".into(), format!("{audio_kbps}k")]);
     }
-    args.extend(
-        ["-movflags", "+faststart", "-f", "mp4", "-progress", "pipe:1", "-nostats"]
-            .map(String::from),
-    );
+    args.extend(OUTPUT_ARGS.map(String::from));
+    args.push(output.to_string_lossy().into_owned());
+    Ok(Plan { args, duration })
+}
+
+/// Joins whole clips end to end, in order. Clips may differ in resolution,
+/// frame rate and audio tracks: every part is fitted (letterboxed if needed)
+/// to the first clip's frame at the highest frame rate, and a clip without
+/// audio gets silence so the soundtrack stays in sync.
+pub fn build_merge(inputs: &[(&Path, &Probe)], output: &Path, encoder: Encoder) -> Result<Plan> {
+    if inputs.len() < 2 {
+        return Err(Error::Message("Pick at least two clips to merge".into()));
+    }
+    let duration: f64 = inputs.iter().map(|(_, p)| p.duration).sum();
+    let (_, first) = inputs[0];
+    // Encoders need even dimensions.
+    let (w, h) = (first.width & !1, first.height & !1);
+    let fps = inputs.iter().map(|(_, p)| p.fps).fold(0.0, f64::max).clamp(1.0, 240.0);
+    let has_audio = inputs.iter().any(|(_, p)| p.audio_streams > 0);
+
+    let mut args: Vec<String> =
+        ["-hide_banner", "-loglevel", "error", "-y"].map(String::from).to_vec();
+    for (path, _) in inputs {
+        args.extend(["-i".into(), path.to_string_lossy().into_owned()]);
+    }
+
+    let mut graph = Vec::new();
+    let mut concat_inputs = String::new();
+    let mut silence_input = inputs.len();
+    for (i, (_, probe)) in inputs.iter().enumerate() {
+        graph.push(format!(
+            "[{i}:v:0]scale={w}:{h}:force_original_aspect_ratio=decrease,\
+             pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps},format=yuv420p[v{i}]"
+        ));
+        concat_inputs.push_str(&format!("[v{i}]"));
+        if !has_audio {
+            continue;
+        }
+        let source = match probe.audio_streams {
+            0 => {
+                args.extend(["-f".into(), "lavfi".into(), "-t".into(), secs(probe.duration)]);
+                args.extend(["-i".into(), "anullsrc=r=48000:cl=stereo".into()]);
+                silence_input += 1;
+                format!("[{}:a:0]", silence_input - 1)
+            }
+            1 => format!("[{i}:a:0]"),
+            // Game and microphone tracks become one, as players expect.
+            _ => format!("[{i}:a:0][{i}:a:1]amix=inputs=2:duration=first:normalize=0,"),
+        };
+        let source = if source.ends_with(',') { source } else { format!("{source}anull,") };
+        // Same format for every part, padded/cut to the video's length.
+        let d = secs(probe.duration);
+        graph.push(format!(
+            "{source}aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,\
+             apad=whole_dur={d},atrim=end={d}[a{i}]"
+        ));
+        concat_inputs.push_str(&format!("[a{i}]"));
+    }
+    graph.push(format!(
+        "{concat_inputs}concat=n={}:v=1:a={}[v]{}",
+        inputs.len(),
+        u8::from(has_audio),
+        if has_audio { "[a]" } else { "" }
+    ));
+
+    args.extend(["-filter_complex".into(), graph.join(";"), "-map".into(), "[v]".into()]);
+    if has_audio {
+        args.extend(["-map".into(), "[a]".into()]);
+    }
+    args.extend(quality_video_args(encoder));
+    if has_audio {
+        args.extend(["-c:a", "aac", "-b:a", "192k"].map(String::from));
+    }
+    args.extend(OUTPUT_ARGS.map(String::from));
     args.push(output.to_string_lossy().into_owned());
     Ok(Plan { args, duration })
 }
@@ -276,6 +352,42 @@ mod tests {
     fn rejects_impossible_targets() {
         let s = spec(None, Some(200_000));
         assert!(build(Path::new("i"), Path::new("o"), &probe(1), &s, Encoder::X264, 1.0).is_err());
+    }
+
+    #[test]
+    fn merge_fits_every_part_to_the_first_clip() {
+        let a = probe(2);
+        let b = Probe { duration: 30.0, width: 1920, height: 1080, fps: 30.0, audio_streams: 0 };
+        let plan = build_merge(
+            &[(Path::new("a.mp4"), &a), (Path::new("b.mp4"), &b)],
+            Path::new("o.mp4"),
+            Encoder::X264,
+        )
+        .unwrap();
+        assert_eq!(plan.duration, 90.0);
+        // Two clips plus generated silence for the one without audio.
+        assert_eq!(plan.args.iter().filter(|a| *a == "-i").count(), 3);
+        assert!(plan.args.contains(&"anullsrc=r=48000:cl=stereo".to_string()));
+        let graph = arg_after(&plan.args, "-filter_complex");
+        assert!(graph.contains("[1:v:0]scale=2560:1440:force_original_aspect_ratio=decrease"));
+        assert!(graph.contains("fps=60"));
+        assert!(graph.contains("[0:a:0][0:a:1]amix"));
+        assert!(graph.contains("[2:a:0]anull,"));
+        assert!(graph.ends_with("[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]"));
+    }
+
+    #[test]
+    fn merge_without_any_audio() {
+        let a = probe(0);
+        let plan = build_merge(
+            &[(Path::new("a"), &a), (Path::new("b"), &a)],
+            Path::new("o"),
+            Encoder::Nvenc,
+        )
+        .unwrap();
+        assert!(!plan.args.contains(&"-c:a".to_string()));
+        assert!(arg_after(&plan.args, "-filter_complex").ends_with("concat=n=2:v=1:a=0[v]"));
+        assert!(build_merge(&[(Path::new("a"), &a)], Path::new("o"), Encoder::X264).is_err());
     }
 
     #[test]

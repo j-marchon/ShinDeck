@@ -1,4 +1,5 @@
-//! Clip editing: rename, trim & cut, and compression to a size target.
+//! Clip editing: rename, trim & cut, compression to a size target, and
+//! merging clips into one.
 
 pub mod ffmpeg;
 mod files;
@@ -15,11 +16,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::library::{self, Clip, Marks};
 use crate::state::AppState;
+use ffmpeg::Probe;
 use plan::{EditSpec, Encoder};
 
 /// Where an edit's result goes. `Ask` never reaches the backend: the UI
@@ -267,6 +269,101 @@ pub fn export(
     commit(state, &root, old_id, &final_path, true)
 }
 
+/// The result of a merge: the new clip, and the originals that went to the
+/// Recycle Bin (with `Replace`).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Merged {
+    pub clip: Clip,
+    pub removed: Vec<String>,
+}
+
+/// The game a clip id belongs to: its top-level folder.
+fn game_of(id: &str) -> &str {
+    id.split_once('/').map_or(library::UNSORTED_GAME, |(game, _)| game)
+}
+
+/// Joins clips end to end, in the given order, into "{Game} Merge #n" next to
+/// the first one. `Replace` then moves the originals to the Recycle Bin.
+pub fn merge(
+    state: &AppState,
+    ids: &[String],
+    destination: Destination,
+    progress: &dyn Fn(f64),
+) -> Result<Merged> {
+    if ids.len() < 2 {
+        return Err(Error::Message("Pick two clips to merge".into()));
+    }
+    if ids.iter().enumerate().any(|(i, id)| ids[..i].contains(id)) {
+        return Err(Error::Message("A clip can't be merged with itself".into()));
+    }
+    let editor = &state.editor;
+    if editor.busy.swap(true, Ordering::SeqCst) {
+        return Err(Error::Message("Another edit is still running".into()));
+    }
+    let _guard = BusyGuard(&editor.busy);
+    editor.cancelled.store(false, Ordering::SeqCst);
+
+    let root = library_root(state)?;
+    let sources = ids.iter().map(|id| clip_path(state, id)).collect::<Result<Vec<_>>>()?;
+    let probes = sources.iter().map(|p| ffmpeg::probe(p)).collect::<Result<Vec<_>>>()?;
+    let encoder = if ffmpeg::has_nvenc() { Encoder::Nvenc } else { Encoder::X264 };
+    let first = &sources[0];
+    // The merged clip starts with the first part, so it takes its date.
+    let stamps = files::Stamps::of(first);
+    let temp = files::temp_path(first, "merge");
+
+    let inputs: Vec<(&Path, &Probe)> = sources.iter().map(PathBuf::as_path).zip(&probes).collect();
+    let result = plan::build_merge(&inputs, &temp, encoder)
+        .and_then(|plan| editor.run(&plan.args, plan.duration, progress));
+    if let Err(e) = result {
+        let _ = fs::remove_file(&temp);
+        return Err(e);
+    }
+
+    let game = game_of(&ids[0]);
+    let game_name = library::display_game_name(game);
+    let stem = files::validate_name(&game_name).unwrap_or("Clips").to_owned();
+    let dir = first.parent().unwrap_or(&root);
+    let final_path = {
+        let mut merges = state.merges.lock().unwrap();
+        let (number, path) = files::merge_path(dir, &stem, merges.value.get(game));
+        if let Err(e) = files::rename(&temp, &path) {
+            let _ = fs::remove_file(&temp);
+            return Err(e);
+        }
+        merges.value.set(game, number);
+        if let Err(e) = merges.save() {
+            log::warn!("cannot save merge counters: {e}");
+        }
+        path
+    };
+    stamps.apply(&final_path);
+
+    let mut removed = Vec::new();
+    let mut favorite = false;
+    if let Destination::Replace = destination {
+        favorite = ids.iter().any(|id| state.favorites.lock().unwrap().value.contains(id));
+        for id in ids {
+            // The merge itself succeeded; a clip that can't be removed just stays.
+            match delete(state, id) {
+                Ok(()) => removed.push(id.clone()),
+                Err(e) => log::warn!("cannot remove merged original {id}: {e}"),
+            }
+        }
+    }
+
+    let mut clip = commit(state, &root, "", &final_path, true)?;
+    if favorite {
+        let mut favorites = state.favorites.lock().unwrap();
+        if favorites.value.set(&clip.id, true) {
+            favorites.save()?;
+        }
+        clip.favorite = true;
+    }
+    Ok(Merged { clip, removed })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -345,6 +442,26 @@ mod tests {
         assert_eq!(&jpeg[..2], &[0xFF, 0xD8]);
         let image = image::load_from_memory(&jpeg).unwrap();
         assert_eq!((image.width(), image.height()), (16 * 192, 108));
+
+        // Merge: a 4 s 720p clip without audio after the 20 s 1440p one.
+        let other = dir.join("other.mp4");
+        let status = Command::new(ffmpeg::path().unwrap())
+            .args(["-hide_banner", "-loglevel", "error", "-y"])
+            .args(["-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30:duration=4"])
+            .args(["-c:v", "libx264", "-preset", "ultrafast"])
+            .arg(&other)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let other_probe = ffmpeg::probe(&other).unwrap();
+        let merged = dir.join("merged.mp4");
+        let plan =
+            plan::build_merge(&[(&source, &probe), (&other, &other_probe)], &merged, Encoder::X264)
+                .unwrap();
+        editor.run(&plan.args, plan.duration, &|_| {}).unwrap();
+        let out = ffmpeg::probe(&merged).unwrap();
+        assert!((out.duration - 24.0).abs() < 0.3, "duration {}", out.duration);
+        assert_eq!((out.width, out.height, out.audio_streams), (1280, 720, 1));
 
         fs::remove_dir_all(&dir).unwrap();
     }

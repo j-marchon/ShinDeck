@@ -3,7 +3,7 @@ use std::sync::{Mutex, RwLock};
 
 use notify_debouncer_mini::{notify::RecommendedWatcher, Debouncer};
 
-use crate::config::{IdSet, Settings, Store};
+use crate::config::{IdSet, MergeCounts, Settings, Store};
 use crate::editor::{Editor, Filmstrips};
 use crate::library::ClipIndex;
 use crate::media::{GameIcons, Thumbnails, Worker};
@@ -17,6 +17,8 @@ pub struct AppState {
     pub favorites: Mutex<Store<IdSet>>,
     /// Clips produced or modified by the editor.
     pub edited: Mutex<Store<IdSet>>,
+    /// Numbers merged clips per game.
+    pub merges: Mutex<Store<MergeCounts>>,
     pub index: RwLock<ClipIndex>,
     pub thumbnails: Thumbnails,
     pub icons: GameIcons,
@@ -32,6 +34,7 @@ impl AppState {
             settings: Mutex::new(Store::load(config_dir.join("settings.json"))),
             favorites: Mutex::new(Store::load(config_dir.join("favorites.json"))),
             edited: Mutex::new(Store::load(config_dir.join("edited.json"))),
+            merges: Mutex::new(Store::load(config_dir.join("merges.json"))),
             index: RwLock::default(),
             thumbnails: Thumbnails::new(cache_dir.join("thumbnails"), worker.clone()),
             icons: GameIcons::new(cache_dir.join("icons"), worker),

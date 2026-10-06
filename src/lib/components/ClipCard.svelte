@@ -2,6 +2,7 @@
   import { api, type Clip } from "../api";
   import { deletion } from "../state/deletion.svelte";
   import { library } from "../state/library.svelte";
+  import { merge } from "../state/merge.svelte";
   import { formatDuration, formatRelativeDate, formatSize } from "../util/format";
   import GameIcon from "./GameIcon.svelte";
   import Icon from "./Icon.svelte";
@@ -26,11 +27,19 @@
   const thumbFailed = $derived(failedUrl === thumbUrl);
   const favorite = $derived(library.isFavorite(clip.id));
   const gameName = $derived(library.gameName(clip.game));
+  // While picking clips to merge, a click selects instead of playing.
+  const selecting = $derived(merge.selecting);
+  const pickedAt = $derived(selecting ? merge.position(clip.id) : 0);
+
+  function activate() {
+    if (selecting) merge.toggle(clip);
+    else onopen(clip);
+  }
 
   function onkeydown(e: KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      onopen(clip);
+      activate();
     }
   }
 
@@ -50,7 +59,16 @@
   }
 </script>
 
-<div class="card" role="button" tabindex="0" onclick={() => onopen(clip)} {onkeydown}>
+<div
+  class="card"
+  class:selecting
+  class:picked={pickedAt > 0}
+  role="button"
+  tabindex="0"
+  aria-pressed={selecting ? pickedAt > 0 : undefined}
+  onclick={activate}
+  {onkeydown}
+>
   <div class="thumb">
     {#if thumbFailed}
       <div class="placeholder"><GameIcon game={clip.game} name={gameName} size={40} /></div>
@@ -66,31 +84,39 @@
       />
     {/if}
 
-    <div class="hover-play"><span><Icon name="play" size={22} /></span></div>
+    {#if selecting}
+      <span class="pick" class:on={pickedAt > 0}>
+        {#if pickedAt}{pickedAt}{/if}
+      </span>
+    {:else}
+      <div class="hover-play"><span><Icon name="play" size={22} /></span></div>
+    {/if}
 
     {#if clip.edited}
       <span class="edited-tag" title="Edited in ShinDeck"><Icon name="pencil" size={12} stroke={2.4} /></span>
     {/if}
 
-    <div class="actions">
-      <button class="action edit" title="Edit clip" aria-label="Edit clip" onclick={edit}>
-        <Icon name="pencil" size={15} />
-      </button>
-      <button
-        class="action star"
-        class:active={favorite}
-        title={favorite ? "Remove from favorites" : "Add to favorites"}
-        aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
-        aria-pressed={favorite}
-        onclick={toggleFavorite}
-      >
-        <Icon name="star" size={17} filled={favorite} />
-      </button>
-    </div>
+    {#if !selecting}
+      <div class="actions">
+        <button class="action edit" title="Edit clip" aria-label="Edit clip" onclick={edit}>
+          <Icon name="pencil" size={15} />
+        </button>
+        <button
+          class="action star"
+          class:active={favorite}
+          title={favorite ? "Remove from favorites" : "Add to favorites"}
+          aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+          aria-pressed={favorite}
+          onclick={toggleFavorite}
+        >
+          <Icon name="star" size={17} filled={favorite} />
+        </button>
+      </div>
 
-    <button class="action remove" title="Move to Recycle Bin" aria-label="Remove clip" onclick={remove}>
-      <Icon name="trash" size={15} />
-    </button>
+      <button class="action remove" title="Move to Recycle Bin" aria-label="Remove clip" onclick={remove}>
+        <Icon name="trash" size={15} />
+      </button>
+    {/if}
 
     {#if clip.durationMs}
       <span class="duration">{formatDuration(clip.durationMs)}</span>
@@ -261,6 +287,37 @@
   }
   .remove:hover {
     color: var(--danger);
+  }
+
+  /* Merge selection. */
+  .card.picked .thumb {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .pick {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: rgb(0 0 0 / 0.35);
+    backdrop-filter: blur(8px);
+    box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.7);
+    color: #050505;
+    font-size: 13px;
+    font-weight: 700;
+    transition:
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .card.selecting:hover .pick:not(.on) {
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+  .pick.on {
+    background: var(--accent);
+    box-shadow: none;
   }
 
   .edited-tag {

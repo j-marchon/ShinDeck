@@ -41,6 +41,7 @@ let clips: Clip[] = [];
 let settings: Settings = { libraryPath: null, setupComplete: false, saveMode: null, confirmDelete: true, editingAvailable: true };
 const progressHandlers = new Set<(p: number) => void>();
 let cancelled = false;
+const mergeCounts = new Map<string, number>();
 
 function generate() {
   let seed = 7;
@@ -162,6 +163,33 @@ export const mockBackend: Backend = {
     clips = [...clips, created];
     edited.add(created.id);
     return { ...created, edited: true };
+  },
+  async mergeClips(ids, destination) {
+    cancelled = false;
+    const parts = ids.map(find);
+    for (let p = 0; p <= 1.0001; p += 0.04) {
+      if (cancelled) throw new Error("Cancelled");
+      progressHandlers.forEach((h) => h(Math.min(1, p)));
+      await delay(70);
+    }
+    const [first] = parts;
+    let n = (mergeCounts.get(first.game) ?? 0) + 1;
+    const stem = first.game || "Unsorted";
+    while (clips.some((c) => c.game === first.game && c.name === `${stem} Merge #${n}`)) n++;
+    mergeCounts.set(first.game, n);
+    const durationMs = parts.reduce((t, c) => t + (c.durationMs ?? 0), 0);
+    const size = parts.reduce((t, c) => t + c.size, 0);
+    const created = { ...makeClip(first.game, `${stem} Merge #${n}`, first.date, size, durationMs), modified: Date.now() };
+    const removed = destination === "replace" ? ids : [];
+    const favorite = removed.some((id) => favorites.has(id));
+    for (const id of removed) {
+      favorites.delete(id);
+      edited.delete(id);
+    }
+    clips = [...clips.filter((c) => !removed.includes(c.id)), created];
+    edited.add(created.id);
+    if (favorite) favorites.add(created.id);
+    return { clip: { ...created, edited: true, favorite }, removed };
   },
   async cancelExport() {
     cancelled = true;

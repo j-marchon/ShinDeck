@@ -54,6 +54,16 @@ pub fn unique_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
         .expect("unbounded search")
 }
 
+/// The next free `dir/{game} Merge #n.mp4` after `count` earlier merges.
+/// Numbers already taken on disk are skipped, so a lost counter never
+/// overwrites anything. Returns the number used and the path.
+pub fn merge_path(dir: &Path, game: &str, count: u32) -> (u32, PathBuf) {
+    (count + 1..)
+        .map(|n| (n, dir.join(format!("{game} Merge #{n}.mp4"))))
+        .find(|(_, p)| !p.exists())
+        .expect("unbounded search")
+}
+
 /// Hidden work file next to `near`. The leading dot keeps it out of the
 /// gallery while it is being written.
 pub fn temp_path(near: &Path, tag: &str) -> PathBuf {
@@ -167,6 +177,17 @@ mod tests {
         let got = fs::metadata(&new).unwrap().modified().unwrap();
         let diff = got.duration_since(past).unwrap_or_else(|e| e.duration());
         assert!(diff < Duration::from_secs(2), "modified time was not carried over");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn numbers_merges_per_game() {
+        let dir = std::env::temp_dir().join(format!("shindeck-merges-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        assert_eq!(merge_path(&dir, "Valorant", 0), (1, dir.join("Valorant Merge #1.mp4")));
+        fs::write(dir.join("Valorant Merge #3.mp4"), "x").unwrap();
+        assert_eq!(merge_path(&dir, "Valorant", 2), (4, dir.join("Valorant Merge #4.mp4")));
+        assert_eq!(merge_path(&dir, "Valorant", 4).0, 5);
         fs::remove_dir_all(&dir).unwrap();
     }
 

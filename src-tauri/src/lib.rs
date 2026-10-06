@@ -55,6 +55,7 @@ pub fn run() {
             commands::delete_clip,
             commands::rename_clip,
             commands::export_clip,
+            commands::merge_clips,
             commands::cancel_export,
         ])
         .run(tauri::generate_context!())

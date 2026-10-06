@@ -155,6 +155,11 @@ class LibraryState {
   /** Moves the clip to the Recycle Bin and drops it from the library. Throws a readable message on failure. */
   async remove(id: string) {
     await api.deleteClip(id);
+    this.forget(id);
+  }
+
+  /** Drops a clip the backend already removed (e.g. replaced by a merge). */
+  forget(id: string) {
     const clip = this.clips.find((c) => c.id === id);
     this.#setClips(this.clips.filter((c) => c.id !== id));
     if (clip) {

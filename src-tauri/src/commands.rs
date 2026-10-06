@@ -182,6 +182,24 @@ pub async fn export_clip(
     .map_err(|e| Error::Message(e.to_string()))?
 }
 
+/// Joins clips end to end, in order. Reports progress like `export_clip`.
+#[tauri::command]
+pub async fn merge_clips(
+    app: AppHandle,
+    ids: Vec<String>,
+    destination: Destination,
+) -> Result<editor::Merged> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let emitter = app.clone();
+        let progress = move |p: f64| {
+            let _ = emitter.emit(EXPORT_PROGRESS_EVENT, p);
+        };
+        editor::merge(&app.state::<AppState>(), &ids, destination, &progress)
+    })
+    .await
+    .map_err(|e| Error::Message(e.to_string()))?
+}
+
 #[tauri::command]
 pub fn cancel_export(state: State<'_, AppState>) {
     state.editor.cancel();

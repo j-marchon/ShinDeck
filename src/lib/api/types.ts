@@ -50,6 +50,14 @@ export interface Clip {
   edited: boolean;
 }
 
+/** Result of merging clips. */
+export interface Merged {
+  /** The new "{Game} Merge #n" clip. */
+  clip: Clip;
+  /** Originals moved to the Recycle Bin (when replacing). */
+  removed: string[];
+}
+
 export interface Game {
   id: string;
   name: string;
@@ -74,6 +82,9 @@ export interface Backend {
   revealClip(id: string): Promise<void>;
   renameClip(id: string, name: string): Promise<Clip>;
   exportClip(id: string, spec: EditSpec, destination: Destination): Promise<Clip>;
+  /** Joins the clips end to end, in this order. Progress arrives via onExportProgress. */
+  mergeClips(ids: string[], destination: Destination): Promise<Merged>;
+  /** Cancels the running export or merge. */
   cancelExport(): Promise<void>;
   onExportProgress(handler: (progress: number) => void): Promise<() => void>;
   setSaveMode(mode: SaveMode): Promise<Settings>;

@@ -1,5 +1,7 @@
 <script lang="ts">
   import { DATE_RANGES, library, SORT_OPTIONS } from "../state/library.svelte";
+  import { merge } from "../state/merge.svelte";
+  import { settings } from "../state/settings.svelte";
   import { plural } from "../util/format";
   import Dropdown from "./Dropdown.svelte";
   import GameFilter from "./GameFilter.svelte";
@@ -19,6 +21,8 @@
   } = $props();
 
   let search: HTMLInputElement;
+
+  const canMerge = $derived(settings.value?.editingAvailable !== false);
 
   const dateLabel = $derived(DATE_RANGES.find((r) => r.key === library.dateRange)?.label ?? "Any time");
 
@@ -106,6 +110,18 @@
   <div class="right">
     <span class="count">{plural(library.visible.length, "clip")}</span>
 
+    <button
+      class="chip"
+      class:on={merge.selecting}
+      aria-pressed={merge.selecting}
+      disabled={!canMerge}
+      title={canMerge ? "Join two clips into one" : "Merging needs the bundled ffmpeg, which is missing"}
+      onclick={() => (merge.selecting ? merge.stop() : merge.start())}
+    >
+      <Icon name="merge" size={15} />
+      Merge
+    </button>
+
     <Dropdown align="right" width={190}>
       {#snippet trigger({ open, toggle })}
         <button class="chip" class:pressed={open} onclick={toggle} title="Sort order">
@@ -156,6 +172,10 @@
   }
   .right {
     flex-shrink: 0;
+  }
+  .chip:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
   .chip.square {
     width: 34px;

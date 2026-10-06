@@ -4,6 +4,9 @@
   import DeleteDialog from "./lib/components/DeleteDialog.svelte";
   import EmptyState from "./lib/components/EmptyState.svelte";
   import Gallery from "./lib/components/Gallery.svelte";
+  import Icon from "./lib/components/Icon.svelte";
+  import MergeBar from "./lib/components/MergeBar.svelte";
+  import MergeDialog from "./lib/components/MergeDialog.svelte";
   import PlayerModal from "./lib/components/player/PlayerModal.svelte";
   import SettingsDialog from "./lib/components/SettingsDialog.svelte";
   import Setup from "./lib/components/Setup.svelte";
@@ -12,6 +15,7 @@
   import Toolbar from "./lib/components/Toolbar.svelte";
   import { deletion } from "./lib/state/deletion.svelte";
   import { library } from "./lib/state/library.svelte";
+  import { merge } from "./lib/state/merge.svelte";
   import { settings } from "./lib/state/settings.svelte";
   import { windowState } from "./lib/state/window.svelte";
 
@@ -68,8 +72,9 @@
   {#if screen === "setup"}
     <div class="body"><Setup oncomplete={onSetupComplete} /></div>
   {:else if screen === "library"}
-    <main class="body" inert={player !== null || showSettings || deletion.pending !== null}>
+    <main class="body" inert={player !== null || showSettings || deletion.pending !== null || merge.reviewing}>
       <Toolbar onrefresh={refresh} onsettings={() => (showSettings = true)} {refreshing} shortcuts={player === null} />
+      {#if merge.selecting}<MergeBar />{/if}
       <div class="content">
         {#if library.status === "loading" || library.status === "idle"}
           <Skeleton />
@@ -108,6 +113,12 @@
       <SettingsDialog onclose={() => (showSettings = false)} />
     {/if}
     <DeleteDialog />
+    {#if merge.reviewing}
+      <MergeDialog />
+    {/if}
+    {#if merge.notice}
+      <div class="toast" role="status"><Icon name="check" size={15} /> {merge.notice}</div>
+    {/if}
   {/if}
 </div>
 
@@ -145,6 +156,33 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+  }
+  .toast {
+    position: absolute;
+    left: 50%;
+    bottom: 22px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: calc(100% - 48px);
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: rgb(16 16 16 / 0.92);
+    box-shadow: var(--float-shadow);
+    color: var(--text);
+    font-size: 13px;
+    transform: translateX(-50%);
+    animation: toast 0.2s ease;
+  }
+  .toast :global(svg) {
+    color: var(--accent);
+  }
+  @keyframes toast {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 6px);
+    }
   }
   .content {
     flex: 1;

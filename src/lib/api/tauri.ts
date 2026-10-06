@@ -2,7 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Backend, Clip, FolderSummary, Library, Settings } from "./types";
+import type { Backend, Clip, FolderSummary, Library, Merged, Settings } from "./types";
 
 const appWindow = getCurrentWindow();
 
@@ -16,6 +16,7 @@ export const tauriBackend: Backend = {
   revealClip: (id) => invoke("reveal_clip", { id }),
   renameClip: (id, name) => invoke<Clip>("rename_clip", { id, name }),
   exportClip: (id, spec, destination) => invoke<Clip>("export_clip", { id, spec, destination }),
+  mergeClips: (ids, destination) => invoke<Merged>("merge_clips", { ids, destination }),
   cancelExport: () => invoke("cancel_export"),
   onExportProgress: (handler) => listen<number>("export-progress", (e) => handler(e.payload)),
   setSaveMode: (mode) => invoke<Settings>("set_save_mode", { mode }),
