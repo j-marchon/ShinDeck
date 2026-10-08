@@ -1,4 +1,4 @@
-import type { Batch, Clip } from "../api";
+import { api, type Batch, type Clip, type Destination } from "../api";
 import { plural } from "../util/format";
 import { library } from "./library.svelte";
 import { merge } from "./merge.svelte";
@@ -18,12 +18,16 @@ class SelectionState {
   active = $state(false);
   ids = $state.raw<ReadonlySet<string>>(new Set());
   /** Which batch dialog is open. */
-  dialog = $state<"rename" | "delete" | null>(null);
+  dialog = $state<"rename" | "delete" | "compress" | null>(null);
   busy = $state(false);
+  /** Compression progress across the whole batch (0..1) and the clip being worked on. */
+  progress = $state(0);
+  current = $state(0);
   error = $state<string | null>(null);
 
   /** Last clip clicked, where a Shift-click range starts. */
   #anchor: string | null = null;
+  #cancelled = false;
 
   /** Selected clips still in the library, oldest first. */
   clips = $derived(library.clips.filter((c) => this.ids.has(c.id)).toSorted((a, b) => a.date - b.date));
@@ -90,7 +94,7 @@ class SelectionState {
     }
   }
 
-  open(dialog: "rename" | "delete") {
+  open(dialog: "rename" | "delete" | "compress") {
     if (!this.count || this.busy) return;
     this.error = null;
     this.dialog = dialog;
@@ -117,6 +121,64 @@ class SelectionState {
       (batch) => batch.done,
       (n) => `Moved ${plural(n, "clip")} to the Recycle Bin`,
     );
+  }
+
+  /**
+   * Compresses the selection one clip after another to fit `bytes`. Clips
+   * already under the target are skipped; failures don't stop the rest.
+   */
+  async compress(target: { label: string; bytes: number }, destination: Destination) {
+    if (this.busy || !this.count) return;
+    this.busy = true;
+    this.error = null;
+    this.progress = 0;
+    this.current = 0;
+    this.#cancelled = false;
+    const clips = this.clips.filter((c) => c.size > target.bytes);
+    const skipped = this.count - clips.length;
+    const done: string[] = [];
+    let failed = 0;
+    let firstError: string | null = null;
+    const unlisten = await api.onExportProgress((p) => (this.progress = (this.current + p) / clips.length));
+    try {
+      for (const clip of clips) {
+        if (this.#cancelled) break;
+        try {
+          const spec = { keep: null, targetBytes: target.bytes, label: target.label };
+          const result = await api.exportClip(clip.id, spec, destination);
+          if (destination === "replace") library.upsert(result, clip.id);
+          else library.upsert(result);
+          done.push(clip.id);
+        } catch (e) {
+          const message = String(e).replace(/^Error: /, "");
+          if (message === "Cancelled") break;
+          failed++;
+          firstError ??= message;
+        }
+        this.current++;
+        this.progress = this.current / clips.length;
+      }
+    } finally {
+      unlisten();
+      this.busy = false;
+    }
+    const finished = new Set([...done, ...this.clips.filter((c) => c.size <= target.bytes).map((c) => c.id)]);
+    const summary = `Compressed ${plural(done.length, "clip")}${skipped ? `, ${skipped} already small enough` : ""}`;
+    if (!failed && !this.#cancelled) {
+      this.stop();
+      toast.show(summary);
+      return;
+    }
+    // New clips leave the originals selected; replaced ones are gone from the library.
+    this.ids = new Set([...this.ids].filter((id) => !finished.has(id)));
+    this.error = failed
+      ? `${done.length ? `${summary}, but ` : ""}${plural(failed, "clip")} failed: ${firstError}`
+      : `Cancelled after compressing ${plural(done.length, "clip")}.`;
+  }
+
+  cancelCompress() {
+    this.#cancelled = true;
+    api.cancelExport();
   }
 
   /** Runs a batch; clips that failed stay selected with the reason shown. */

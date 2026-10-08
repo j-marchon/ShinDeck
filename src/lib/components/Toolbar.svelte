@@ -198,6 +198,15 @@
           <Icon name="tag" size={15} />
           Rename
         </button>
+        <button
+          class="chip action compress"
+          disabled={!selection.count || !canMerge}
+          onclick={() => selection.open("compress")}
+          title={canMerge ? "Compress to a size" : "Compressing needs the bundled ffmpeg, which is missing"}
+        >
+          <Icon name="compress" size={17} />
+          Compress
+        </button>
         <button class="chip action danger" disabled={!selection.count} onclick={() => selection.open("delete")} title="Delete">
           <Icon name="trash" size={15} />
           Delete
@@ -270,6 +279,18 @@
   .action:hover:not(:disabled) {
     background: var(--glass-3);
   }
+  /* The primary batch action: a touch larger, in green. */
+  .action.compress {
+    height: 38px;
+    padding: 0 16px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #fff;
+    background: #2f9e44;
+  }
+  .action.compress:hover:not(:disabled) {
+    background: #37b24d;
+  }
   .action.danger:hover:not(:disabled) {
     color: var(--danger);
   }
@@ -293,6 +314,10 @@
   .jiggle .action:nth-child(3) {
     animation-delay: -0.2s;
     animation-duration: 0.35s;
+  }
+  .jiggle .action:nth-child(4) {
+    animation-delay: -0.05s;
+    animation-duration: 0.31s;
   }
   .jiggle .action:hover {
     animation-play-state: paused;
